@@ -1,0 +1,4 @@
+# Runtime dependencies for backfill/ (and later sync/).
+# Tests additionally need: pytest
+psycopg[binary]>=3.1
+tzdata; platform_system == "Windows"

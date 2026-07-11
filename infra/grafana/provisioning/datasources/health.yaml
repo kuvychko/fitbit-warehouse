@@ -1,0 +1,22 @@
+# Provisioned PostgreSQL datasource over the read-only role.
+# Env vars are interpolated by Grafana at startup (set via compose).
+apiVersion: 1
+
+datasources:
+  - name: Health (TimescaleDB)
+    uid: health-postgres
+    type: postgres
+    access: proxy
+    url: ${PG_HOST}:${PG_PORT}
+    user: health_ro
+    jsonData:
+      database: ${PG_DB}
+      sslmode: disable
+      timescaledb: true
+      postgresVersion: 1700
+    secureJsonData:
+      password: ${HEALTH_RO_PW}
+    # Not the default: on a shared Grafana (e.g. alongside another tenant's
+    # datasource) two defaults would fight. Dashboards reference the uid.
+    isDefault: false
+    editable: false

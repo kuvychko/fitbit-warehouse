@@ -10,35 +10,40 @@
 
 ## 1. Database foundation (health-schema)
 
-- [ ] 1.1 `infra/docker-compose.yml`: two-mode layout — `db` (TimescaleDB,
+- [x] 1.1 `infra/docker-compose.yml`: two-mode layout — `db` (TimescaleDB,
       pinned image, `profiles: [standalone]`), one-shot `migrate` service,
-      networks for both modes; `.env.example` finalized against it
-- [ ] 1.2 Migration 001: guarded roles (`health_owner/_rw/_ro`), guarded
+      networks for both modes; `.env.example` finalized against it (+ root
+      `compose.yaml` include so the root `.env` is picked up)
+- [x] 1.2 Migration 001: guarded roles (`health_owner/_rw/_ro`), guarded
       `CREATE SCHEMA health`, grants + default privileges,
       `search_path = health, public`
-- [ ] 1.3 Migration 002: metric hypertables (heart_rate intraday, resting HR,
+- [x] 1.3 Migration 002: metric hypertables (heart_rate intraday, resting HR,
       sleep sessions + stages + scores, steps, calories/distance/activity
       levels, spo2, hrv, breathing_rate, skin temperature, azm, weight/body
       fat), natural-key unique constraints, `source` + `device` provenance
       columns, compression on intraday tables
-- [ ] 1.4 Verify: migrations idempotent (run twice), `health_rw`/`health_ro`
+- [x] 1.4 Verify: migrations idempotent (run twice), `health_rw`/`health_ro`
       privilege matrix, hypertables confirmed — in standalone mode
 
 ## 2. Takeout backfill (takeout-backfill)
 
-- [ ] 2.1 Inventory the actual export: map directories/files → metric families;
+- [x] 2.1 Inventory the actual export: map directories/files → metric families;
       record the mapping (incl. CSV-vs-JSON duality and the classic-JSON UTC
-      quirk) in `docs/takeout-format.md` — initial survey done in explore
-      session 2026-07-11, needs writing up
-- [ ] 2.2 `backfill/` Python CLI: parsers per metric family (CSV-first, JSON
+      quirk) in `docs/takeout-format.md`
+- [x] 2.2 `backfill/` Python CLI: parsers per metric family (CSV-first, JSON
       only where no CSV exists) → normalized rows → batched upsert; per-file
       validation; loud skip reporting; summary with row counts + MIN/MAX(time)
-- [ ] 2.2b Google Fit parser: Basis Peak raw streams (Data-Points JSON, ns
+- [x] 2.2b Google Fit parser: Basis Peak raw streams (Data-Points JSON, ns
       epochs) → same tables, `source='googlefit-takeout'`,
       `device='Basis Peak'`; skip derived/merged and phone-sensor streams
+      (+ Fit/All Sessions sleep sessions discovered during verification)
 - [ ] 2.3 Load full history (shared-cluster mode against `warehouse-db`);
       verify counts/ranges against raw files; re-run → identical counts
-- [ ] 2.4 Synthetic-fixture tests for parsers (no real health data in repo)
+      — DONE locally in standalone mode 2026-07-11 (48M rows, 19 tables,
+      re-run byte-identical); the warehouse-db run needs NAS credentials
+      (user step)
+- [x] 2.4 Synthetic-fixture tests for parsers (no real health data in repo)
+      — tests/test_parsers.py, 15 tests
 
 ## 3. Google Health API sync (health-api-sync)
 
@@ -56,8 +61,9 @@
 
 ## 4. Dashboards + wrap-up (health-dashboards)
 
-- [ ] 4.1 Grafana provisioning: `health_ro` datasource + starter dashboard
-      (HR, sleep, steps) spanning the backfill↔sync seam
+- [x] 4.1 Grafana provisioning: `health_ro` datasource + starter dashboard
+      (HR, sleep, steps) spanning the backfill↔sync seam — verified live:
+      datasource healthy, 2015 Basis + 2026 Fitbit data render, INSERT denied
 - [ ] 4.2 Verify seam: panels continuous across the boundary date; datasource
       role cannot INSERT
 - [ ] 4.3 README pass: quickstart proven from a fresh clone (standalone mode),

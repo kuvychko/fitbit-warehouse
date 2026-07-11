@@ -1,0 +1,121 @@
+{
+  "uid": "health-overview",
+  "title": "Health Overview",
+  "tags": ["health", "fitbit-warehouse"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": { "from": "now-90d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Heart rate (5-min avg)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 6, "spanNulls": false }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time_bucket('5 minutes', time) AS \"time\", avg(bpm) AS \"bpm\" FROM health.heart_rate WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Resting heart rate",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS \"time\", bpm AS \"resting bpm\" FROM health.resting_heart_rate WHERE $__timeFilter(day::timestamptz) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Steps per day",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 60 }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time_bucket('1 day', time) AS \"time\", sum(steps) AS \"steps\" FROM health.steps WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Sleep per night (hours)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 60 }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS \"time\", sum(minutes_asleep) / 60.0 AS \"asleep\" FROM health.sleep_session WHERE $__timeFilter(day::timestamptz) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Nightly HRV (rmssd)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS \"time\", rmssd_ms AS \"rmssd\" FROM health.hrv_daily WHERE $__timeFilter(day::timestamptz) ORDER BY 1"
+        }
+      ]
+    }
+  ]
+}
