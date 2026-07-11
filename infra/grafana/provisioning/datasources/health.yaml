@@ -7,7 +7,9 @@ datasources:
     uid: health-postgres
     type: postgres
     access: proxy
-    url: ${PG_HOST}:${PG_PORT}
+    # 5432 hardcoded: Grafana env interpolation has no default syntax, and a
+    # host Grafana (Pi) only exports PG_HOST/PG_DB + role passwords.
+    url: ${PG_HOST}:5432
     user: health_ro
     jsonData:
       database: ${PG_DB}

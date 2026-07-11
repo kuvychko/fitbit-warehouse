@@ -8,4 +8,6 @@ providers:
     updateIntervalSeconds: 30
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards
+      # distinct path so this provider can coexist with another tenant's
+      # provider in a shared Grafana (e.g. the Pi instance)
+      path: /var/lib/grafana/dashboards-health
