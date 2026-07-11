@@ -1,0 +1,56 @@
+# Tasks: health-tenant-foundation
+
+## 0. External kickoffs (slow — start immediately)
+
+- [ ] 0.1 Request the Google Takeout Fitbit export (user action; generation can
+      take hours–days; gates 2.x)
+- [ ] 0.2 Create the Google Cloud project + OAuth 2.0 client in testing mode
+      (user action with guided steps; gates 3.1)
+
+## 1. Database foundation (health-schema)
+
+- [ ] 1.1 `infra/docker-compose.yml`: two-mode layout — `db` (TimescaleDB,
+      pinned image, `profiles: [standalone]`), one-shot `migrate` service,
+      networks for both modes; `.env.example` finalized against it
+- [ ] 1.2 Migration 001: guarded roles (`health_owner/_rw/_ro`), guarded
+      `CREATE SCHEMA health`, grants + default privileges,
+      `search_path = health, public`
+- [ ] 1.3 Migration 002: metric hypertables (heart_rate, sleep sessions +
+      stages, steps, spo2, hrv, breathing_rate, azm — final list per Takeout
+      contents), natural-key unique constraints, `source` column
+- [ ] 1.4 Verify: migrations idempotent (run twice), `health_rw`/`health_ro`
+      privilege matrix, hypertables confirmed — in standalone mode
+
+## 2. Takeout backfill (takeout-backfill)
+
+- [ ] 2.1 Inventory the actual export: map directories/files → metric families;
+      record the mapping in `docs/takeout-format.md`
+- [ ] 2.2 `backfill/` Python CLI: parsers per metric family → normalized rows →
+      batched upsert; per-file validation; loud skip reporting; summary with
+      row counts + MIN/MAX(time)
+- [ ] 2.3 Load full history (shared-cluster mode against `warehouse-db`);
+      verify counts/ranges against raw files; re-run → identical counts
+- [ ] 2.4 Synthetic-fixture tests for parsers (no real health data in repo)
+
+## 3. Google Health API sync (health-api-sync)
+
+- [ ] 3.1 **Spike (gates the rest of phase 3)**: interactive OAuth flow in
+      testing mode, refresh token stored at `GOOGLE_TOKEN_PATH`, one successful
+      data-type read; document findings (scopes, quotas, data-type shapes) in
+      `docs/health-api-notes.md`
+- [ ] 3.2 `sync/` poller: thin API client, per-data-type pullers, catch-up
+      window (default 7d), natural-key upserts (DO UPDATE for daily summaries,
+      DO NOTHING for immutable intraday), 429/Retry-After handling
+- [ ] 3.3 Containerize + schedule (compose service on the Pi, cron-style);
+      Healthchecks success/fail pings with unset-URL no-op
+- [ ] 3.4 Deploy to the Pi in shared-cluster mode; smoke: yesterday's data
+      lands; overlap re-poll adds no rows; kill poller → dead-man alert fires
+
+## 4. Dashboards + wrap-up (health-dashboards)
+
+- [ ] 4.1 Grafana provisioning: `health_ro` datasource + starter dashboard
+      (HR, sleep, steps) spanning the backfill↔sync seam
+- [ ] 4.2 Verify seam: panels continuous across the boundary date; datasource
+      role cannot INSERT
+- [ ] 4.3 README pass: quickstart proven from a fresh clone (standalone mode),
+      screenshots reviewed for personal-data leakage before commit
