@@ -1,0 +1,10 @@
+# Secret-scanning pre-commit hook. Install once with:
+#   pip install pre-commit   (or: pipx install pre-commit)
+#   pre-commit install
+# Run against all files manually:
+#   pre-commit run --all-files
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

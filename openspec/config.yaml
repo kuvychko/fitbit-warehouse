@@ -1,0 +1,10 @@
+schema: spec-driven
+
+context: |
+  Public project: Fitbit health data -> TimescaleDB.
+  Backfill from Google Takeout export (per-day JSON); ongoing sync via the
+  Google Health API (legacy Fitbit Web API dies Sept 2026 - never target it).
+  Schema `health`, roles health_owner/_rw/_ro, two-mode deployment
+  (standalone profile vs shared PG_HOST) per the warehouse tenant pattern.
+  Never commit secrets, tokens, or real health data; keep docs usable by
+  strangers without homelab context.

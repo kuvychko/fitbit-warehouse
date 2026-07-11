@@ -1,0 +1,42 @@
+# Secrets / local config — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+**/secrets/
+token*.json
+credentials*.json
+
+# Personal health data — NEVER commit
+# (Takeout exports, extracted JSON/CSV, database dumps)
+data/
+takeout/
+*.zip
+*.tgz
+*.dump
+*.csv
+
+# SQL: dumps are data, versioned migrations are code — keep migrations only
+*.sql
+!**/migrations/*.sql
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+
+# Logs / runtime
+*.log
