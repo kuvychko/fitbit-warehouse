@@ -19,11 +19,15 @@ and default privileges so `_rw`/`_ro` automatically cover future tables.
   `public` usage)
 
 ### Requirement: Metric hypertables with natural keys
-The schema SHALL define TimescaleDB hypertables for the core Fitbit metric
-families — intraday heart rate, sleep sessions with stage breakdowns, steps,
-SpO2, HRV, breathing rate, and active-zone minutes — each with a unique
-constraint on its natural time grain and a `source` column recording provenance
-(`takeout` or `api`).
+The schema SHALL define TimescaleDB hypertables for the core metric families
+confirmed present in the exports — intraday heart rate, resting heart rate,
+sleep sessions with stage breakdowns and scores, steps,
+calories/distance/activity levels, SpO2, HRV, breathing rate, skin
+temperature, active-zone minutes, and weight/body fat — each with a unique
+constraint on its natural time grain and provenance columns: `source`
+(`fitbit-takeout`, `googlefit-takeout`, or `api`) and, where the data carries
+it, the recording `device` (e.g. "Charge 5", "Basis Peak"). All time columns
+SHALL be `timestamptz` stored as UTC.
 
 #### Scenario: Hypertables exist
 - **WHEN** migrations have run

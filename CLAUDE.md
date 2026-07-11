@@ -12,6 +12,25 @@ TimescaleDB and keeps it current:
   daily pull + catch-up window; idempotent upserts so backfill/sync overlap is harmless.
 - **Dashboards**: Grafana over the `health` schema via a read-only role.
 
+## Audience: any Fitbit / Google Health user, not just the author
+
+Treat this as a product for strangers, not a personal pipeline. Concretely:
+
+- **Docs follow the new-user journey**, in this order: stand up the DB → request
+  and download the Takeout export(s) → run the backfill → set up the API sync
+  on a cadence → wire up Grafana dashboards/reports. Write every doc from that
+  user's perspective; the author's homelab is never a prerequisite.
+- **No private-data leakage in docs**: examples, sample rows, screenshots, and
+  doc snippets use synthesized data only (same rule as tests/fixtures below).
+- **Rare data sources are optional, not required**: the Basis Peak / Google Fit
+  import will apply to few users — keep it a clearly-marked optional path that
+  the main flow never depends on.
+- **DB backups: required, but out of scope**. Docs must call out that users need
+  their own full-database backup policy (per-schema `pg_dump -n` silently drops
+  hypertable chunks). In the author's deployment this is owned by the private
+  `homelab` repo — this project only documents the need, it never implements
+  backups.
+
 ## Warehouse tenant context (private deployment)
 
 In the author's homelab this repo is a *tenant* of a shared TimescaleDB cluster

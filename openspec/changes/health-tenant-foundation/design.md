@@ -15,6 +15,21 @@ API work targets the **Google Health API** (Google Cloud project + Google OAuth;
 31 data types; `list` / `reconcile` / `rollUp` / `dailyRollUp` read methods;
 intraday without special approval).
 
+The actual Takeout exports (pulled July 2026, verified complete) shape the scope:
+
+- **Fitbit ("Google Health") export, 482 MB**: 2016-10-02 → present. Ships most
+  streams in *two parallel formats*: classic per-day JSON ("Global Export
+  Data") and newer per-day CSVs ("Physical Activity_GoogleData") with ISO-8601
+  UTC timestamps, a device `data source` column, and per-stream readmes. The
+  classic JSON has a trap: timestamp *values* are UTC but files are bounded by
+  *local* day. Heart rate runs at ~5–15 s resolution (~20–30 M rows over the
+  decade). Sleep stage detail (`levels`) and exercise logs exist only in JSON.
+- **Google Fit export, 11 MB**: contains the surviving **Basis Peak** archive —
+  per-minute heart rate (149 k points), calories, steps, and activity segments
+  for 2015-07-03 → 2015-11-02 — as Google Fit "Data Points" JSON
+  (`startTimeNanos`, `fpVal`/`intVal`). A dense baseline from a decade ago,
+  ending ~11 months before the Fitbit history starts.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -34,9 +49,12 @@ intraday without special approval).
 ## Decisions
 
 1. **Schema-first, sources adapt.** Tables model *metrics* (heart_rate, sleep,
-   steps, …), not sources. Both the Takeout parser and the API poller normalize
-   into the same shape. A `source` column (`takeout` | `api`) records provenance
-   without splitting tables.
+   steps, …), not sources. All writers — the Fitbit Takeout parser, the Google
+   Fit/Basis parser, the API poller — normalize into the same shape. Provenance
+   lives in columns, not tables: `source`
+   (`fitbit-takeout` | `googlefit-takeout` | `api`) plus a `device` column
+   where the data carries it ("Charge 5", "Basis Peak"). "Resting HR 2015 vs
+   2026" is then a plain query over one table.
 
 2. **Idempotency via natural time keys.** Every hypertable gets a primary/unique
    key on its natural grain (e.g. `(time)` for per-minute HR, `(date)` for daily
@@ -45,11 +63,19 @@ intraday without special approval).
    recent values — decided per table in specs). Overlap between backfill and
    sync, or between consecutive polls, is therefore harmless by construction.
 
-3. **Exact table list is fixed during implementation, not up front.** Takeout
-   directory contents drive Phase A's table set (target: heart rate intraday,
-   sleep sessions + stages, steps, SpO2, HRV, breathing rate, AZM, weight if
-   present). The `health-schema` spec defines requirements per metric *family*;
-   adding a table later is additive, not breaking.
+3. **Table list driven by what the export actually contains.** Confirmed
+   present and worth importing (tier 1): heart rate intraday, resting HR, sleep
+   sessions + stages + sleep score, steps, calories/distance/activity levels,
+   SpO2, HRV, breathing rate, skin temperature, AZM, weight/body fat. Small but
+   cheap extras (tier 2, add opportunistically): VO2max, Daily Readiness,
+   Stress Score, ECG readings, exercise sessions, mindfulness/EDA. Explicitly
+   *skipped*: GPS/location samples and live pace (bulky, low insight, most
+   privacy-sensitive), swim lengths, glucose (empty in this export), menstrual
+   health (n/a), social/notification/commerce cruft — the loader reports these
+   as intentionally skipped rather than unknown. The `health-schema` spec
+   defines requirements per metric *family*; adding a table later is additive,
+   not breaking. Volume is modest (tens of millions of intraday HR rows);
+   enable native Timescale compression on intraday hypertables.
 
 4. **Bootstrap migrations copy the battle-tested patterns**: `\gexec`-guarded
    `CREATE ROLE` / `CREATE SCHEMA` (plain `IF NOT EXISTS` requires database
@@ -60,7 +86,12 @@ intraday without special approval).
 
 5. **Backfill is a Python CLI, not a container service.** It runs once, on
    whatever machine holds the Takeout zip (dev laptop), connecting to the DB
-   directly. Parse per-day JSON → normalized rows → batched `COPY`/upsert.
+   directly. Parse → normalized rows → batched `COPY`/upsert. **CSV-first**:
+   where a stream exists in both Fitbit formats, load the newer CSVs
+   (unambiguous UTC timestamps, device source column) and skip the classic
+   JSON duplicate; use JSON only for CSV-less streams (sleep `levels`/stages,
+   exercise logs). A second, small parser module handles the Google Fit export
+   (Basis Peak streams — same tables, `source = 'googlefit-takeout'`).
    Python (stdlib + psycopg) keeps it readable for a public audience.
 
 6. **Poller is a small Python container** on the Pi: on schedule (daily +
@@ -76,7 +107,13 @@ intraday without special approval).
    verification or scopes block personal use, we re-plan (fallback: scheduled
    Takeout re-exports — clunky but viable).
 
-8. **Grafana: provisioning-as-code** (datasource on `health_ro` + starter
+8. **UTC everywhere.** Every time column is `timestamptz` stored as UTC. The
+   newer CSVs and the Google Fit nanosecond epochs are already UTC; the classic
+   JSON's UTC-values/local-day-file-boundary quirk is a parser concern,
+   documented in `docs/takeout-format.md`. Local-time rendering is Grafana's
+   job.
+
+9. **Grafana: provisioning-as-code** (datasource on `health_ro` + starter
    dashboards JSON), same layout as `env_monitoring/infra/grafana`. In the
    author's deployment these load into the existing Pi Grafana; standalone mode
    bundles a Grafana service behind the same compose profile as the DB.

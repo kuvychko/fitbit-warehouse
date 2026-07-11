@@ -2,8 +2,9 @@
 
 ## 0. External kickoffs (slow — start immediately)
 
-- [ ] 0.1 Request the Google Takeout Fitbit export (user action; generation can
-      take hours–days; gates 2.x)
+- [x] 0.1 Request the Google Takeout Fitbit export (user action; generation can
+      take hours–days; gates 2.x) — done 2026-07-11: Fitbit (482 MB) + Google
+      Fit (11 MB, Basis Peak) zips in `data/`, verified complete
 - [ ] 0.2 Create the Google Cloud project + OAuth 2.0 client in testing mode
       (user action with guided steps; gates 3.1)
 
@@ -15,19 +16,26 @@
 - [ ] 1.2 Migration 001: guarded roles (`health_owner/_rw/_ro`), guarded
       `CREATE SCHEMA health`, grants + default privileges,
       `search_path = health, public`
-- [ ] 1.3 Migration 002: metric hypertables (heart_rate, sleep sessions +
-      stages, steps, spo2, hrv, breathing_rate, azm — final list per Takeout
-      contents), natural-key unique constraints, `source` column
+- [ ] 1.3 Migration 002: metric hypertables (heart_rate intraday, resting HR,
+      sleep sessions + stages + scores, steps, calories/distance/activity
+      levels, spo2, hrv, breathing_rate, skin temperature, azm, weight/body
+      fat), natural-key unique constraints, `source` + `device` provenance
+      columns, compression on intraday tables
 - [ ] 1.4 Verify: migrations idempotent (run twice), `health_rw`/`health_ro`
       privilege matrix, hypertables confirmed — in standalone mode
 
 ## 2. Takeout backfill (takeout-backfill)
 
 - [ ] 2.1 Inventory the actual export: map directories/files → metric families;
-      record the mapping in `docs/takeout-format.md`
-- [ ] 2.2 `backfill/` Python CLI: parsers per metric family → normalized rows →
-      batched upsert; per-file validation; loud skip reporting; summary with
-      row counts + MIN/MAX(time)
+      record the mapping (incl. CSV-vs-JSON duality and the classic-JSON UTC
+      quirk) in `docs/takeout-format.md` — initial survey done in explore
+      session 2026-07-11, needs writing up
+- [ ] 2.2 `backfill/` Python CLI: parsers per metric family (CSV-first, JSON
+      only where no CSV exists) → normalized rows → batched upsert; per-file
+      validation; loud skip reporting; summary with row counts + MIN/MAX(time)
+- [ ] 2.2b Google Fit parser: Basis Peak raw streams (Data-Points JSON, ns
+      epochs) → same tables, `source='googlefit-takeout'`,
+      `device='Basis Peak'`; skip derived/merged and phone-sensor streams
 - [ ] 2.3 Load full history (shared-cluster mode against `warehouse-db`);
       verify counts/ranges against raw files; re-run → identical counts
 - [ ] 2.4 Synthetic-fixture tests for parsers (no real health data in repo)
