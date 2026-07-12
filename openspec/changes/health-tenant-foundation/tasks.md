@@ -63,11 +63,11 @@
       Healthchecks success/fail pings with unset-URL no-op — done 2026-07-12:
       long-running loop container (POLL_INTERVAL=7200), profile "sync",
       restart unless-stopped; ping code in place, URL not yet set
-- [ ] 3.4 Deploy to the Pi in shared-cluster mode; smoke: yesterday's data
+- [x] 3.4 Deploy to the Pi in shared-cluster mode; smoke: yesterday's data
       lands; overlap re-poll adds no rows; kill poller → dead-man alert fires
-      — deployed + smoke-verified 2026-07-12 (first cycle OK on NAS, seam
-      gap-free); REMAINING: create Healthchecks.io check (user), set
-      HEALTHCHECKS_PING_URL on the Pi, verify dead-man alert
+      — done 2026-07-12: deployed, seam gap-free on warehouse-db;
+      HEALTHCHECKS_PING_URL live, success ping on cycle OK, alert fire +
+      resolve verified via /fail + success pings
 
 ## 4. Dashboards + wrap-up (health-dashboards)
 
