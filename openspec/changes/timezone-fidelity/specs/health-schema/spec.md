@@ -3,12 +3,12 @@
 ## ADDED Requirements
 
 ### Requirement: Per-sample UTC offset retained
-The list-fed metric tables (`heart_rate`, `spo2`, `hrv`, `azm`, `weight`,
-`body_fat`, `sleep_session`, `sleep_stage`) SHALL have a nullable
-`utc_offset_s integer` column recording the local-time offset (seconds) the
-measurement was experienced at, where the source provides it. NULL means
-"unknown — assume home zone". The migration SHALL be additive and safe on
-compressed hypertables (nullable, no default).
+The schema SHALL add a nullable `utc_offset_s integer` column to the
+list-fed metric tables (`heart_rate`, `spo2`, `hrv`, `azm`, `weight`,
+`body_fat`, `sleep_session`, `sleep_stage`) recording the local-time offset
+(seconds) the measurement was experienced at, where the source provides it.
+NULL means "unknown — assume home zone". The migration SHALL be additive
+and safe on compressed hypertables (nullable, no default).
 
 #### Scenario: Additive migration re-runs cleanly
 - **WHEN** migration 003 runs against a database with populated, partially
