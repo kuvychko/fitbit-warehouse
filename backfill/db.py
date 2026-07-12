@@ -25,24 +25,28 @@ class TableSpec:
 TABLES: dict[str, TableSpec] = {
     t.name: t
     for t in [
-        TableSpec("heart_rate", ("time", "bpm", "confidence", "source", "device"), ("time",), "nothing"),
+        # utc_offset_s trails the list-fed tables: parsers that predate it
+        # (or sources without offsets) simply yield shorter tuples and the
+        # loader pads with NULL ("unknown, assume home zone").
+        TableSpec("heart_rate", ("time", "bpm", "confidence", "source", "device", "utc_offset_s"), ("time",), "nothing"),
         TableSpec("steps", ("time", "steps", "source", "device"), ("time",), "nothing"),
         TableSpec("calories", ("time", "kcal", "source", "device"), ("time",), "nothing"),
         TableSpec("distance", ("time", "meters", "source", "device"), ("time",), "nothing"),
         TableSpec("floors", ("time", "floors", "source", "device"), ("time",), "nothing"),
-        TableSpec("spo2", ("time", "pct", "source", "device"), ("time",), "nothing"),
-        TableSpec("hrv", ("time", "rmssd_ms", "sdrr_ms", "source", "device"), ("time",), "nothing"),
+        TableSpec("spo2", ("time", "pct", "source", "device", "utc_offset_s"), ("time",), "nothing"),
+        TableSpec("hrv", ("time", "rmssd_ms", "sdrr_ms", "source", "device", "utc_offset_s"), ("time",), "nothing"),
         TableSpec("device_temperature", ("time", "deviation_c", "sensor_type", "source", "device"), ("time",), "nothing"),
-        TableSpec("azm", ("time", "zone", "minutes", "source", "device"), ("time", "zone"), "nothing"),
-        TableSpec("sleep_stage", ("time", "level", "seconds", "is_short", "source"), ("time", "level"), "nothing"),
+        TableSpec("azm", ("time", "zone", "minutes", "source", "device", "utc_offset_s"), ("time", "zone"), "nothing"),
+        TableSpec("sleep_stage", ("time", "level", "seconds", "is_short", "source", "utc_offset_s"), ("time", "level"), "nothing"),
         TableSpec(
             "sleep_session",
             ("start_time", "end_time", "day", "log_id", "duration_ms", "minutes_asleep",
              "minutes_awake", "minutes_to_fall_asleep", "minutes_after_wakeup", "time_in_bed",
              "efficiency", "sleep_type", "log_type", "main_sleep", "levels_summary",
-             "source", "device"),
+             "source", "device", "utc_offset_s"),
             ("start_time",), "update",
         ),
+        TableSpec("steps_daily", ("day", "steps", "source", "device"), ("day",), "update"),
         TableSpec(
             "sleep_score",
             ("time", "sleep_log_id", "overall", "composition", "revitalization",
@@ -54,8 +58,8 @@ TABLES: dict[str, TableSpec] = {
         TableSpec("resting_heart_rate", ("day", "bpm", "error_bpm", "source"), ("day",), "update"),
         TableSpec("active_minutes_daily", ("day", "sedentary_min", "lightly_min", "moderately_min", "very_min", "source"), ("day",), "update"),
         TableSpec("hrv_daily", ("day", "rmssd_ms", "nremhr_bpm", "entropy", "source"), ("day",), "update"),
-        TableSpec("weight", ("time", "weight_kg", "bmi", "source", "device"), ("time",), "update"),
-        TableSpec("body_fat", ("time", "fat_pct", "source", "device"), ("time",), "update"),
+        TableSpec("weight", ("time", "weight_kg", "bmi", "source", "device", "utc_offset_s"), ("time",), "update"),
+        TableSpec("body_fat", ("time", "fat_pct", "source", "device", "utc_offset_s"), ("time",), "update"),
     ]
 }
 
@@ -88,6 +92,9 @@ class Loader:
         self.written: dict[str, int] = {}  # rows affected per table
 
     def add(self, table: str, row: tuple) -> None:
+        spec = TABLES[table]
+        if len(row) < len(spec.cols):  # trailing optional cols -> NULL
+            row = row + (None,) * (len(spec.cols) - len(row))
         buf = self._pending.setdefault(table, [])
         buf.append(row)
         if len(buf) >= self.BATCH:

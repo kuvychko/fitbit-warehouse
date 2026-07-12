@@ -86,6 +86,23 @@ unless marked *open*. Sample values are synthesized.
   have no listable/rollup-able API data type (as of v4 today) — those tables
   stay Takeout-only for now.
 
+## timezone-fidelity findings (2026-07-12, verified live)
+
+- Every list-based sample/session carries `utcOffset` (e.g. `"-25200s"`) —
+  now stored as `utc_offset_s`; offset changes mark travel.
+- `dailyRollUp` is **Fitbit-deduplicated across devices** even with the
+  default all-sources family: 2026-07-04 returns 13,165 (the wearable-only
+  number), not the 33,715 naive multi-source sum. It runs ~0.6% under the
+  app's displayed total (app-side merge of phone steps during non-wear
+  gaps) — accepted as within tolerance.
+- `dailyRollUp` quirks: rejects `pageSize` beyond what the duration allows
+  and rejects ranges somewhere between 90 and 180 days — both surface as
+  `INVALID_ROLLUP_QUERY_DURATION`. The puller uses 90-day chunks, no
+  pageSize.
+- `steps_daily` history: one-time `python -m sync.poller
+  --bootstrap-steps-daily` (Fitbit era); Basis 2015 days derived by the
+  backfill from Basis intraday.
+
 ## Open items / risks
 
 - **Testing-mode refresh tokens expire after 7 days** (docs). Ours was minted

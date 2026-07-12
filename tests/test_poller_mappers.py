@@ -76,3 +76,33 @@ def test_update_upsert_coalesces():
 def test_pullers_reference_known_tables():
     for _, table, _, _ in poller.PULLERS:
         assert table in db.TABLES
+
+
+def test_utc_offset_captured_and_half_hour_zones():
+    p = {"dataSource": {"device": {"displayName": "Charge 6"}},
+         "heartRate": {"sampleTime": {"physicalTime": "2026-01-02T13:00:00Z",
+                                      "utcOffset": "+19800s"},  # UTC+5:30
+                       "beatsPerMinute": "70"}}
+    [(_, row)] = list(poller.map_heart_rate(p))
+    assert row[-1] == 19800
+    p["heartRate"]["sampleTime"].pop("utcOffset")
+    [(_, row)] = list(poller.map_heart_rate(p))
+    assert row[-1] is None  # absent offset -> NULL, "assume home zone"
+
+
+def test_map_daily_steps_civil_day():
+    p = {"civilStartTime": {"date": {"year": 2026, "month": 7, "day": 4}, "time": {}},
+         "civilEndTime": {"date": {"year": 2026, "month": 7, "day": 5}, "time": {}},
+         "steps": {"countSum": "13165"}}
+    [(table, row)] = list(poller.map_daily_steps(p))
+    assert table == "steps_daily"
+    assert row == (date(2026, 7, 4), 13165, "api", None)
+
+
+def test_loader_pads_short_rows_with_null():
+    loader = db.Loader(conn=None)  # no flush below BATCH, conn untouched
+    loader.add("heart_rate", (datetime(2026, 1, 2, tzinfo=timezone.utc),
+                              60.0, None, "fitbit-takeout", "Charge 6"))
+    row = loader._pending["heart_rate"][0]
+    assert len(row) == len(db.TABLES["heart_rate"].cols)
+    assert row[-1] is None

@@ -64,7 +64,7 @@
     },
     {
       "id": 3,
-      "title": "Steps per day",
+      "title": "Steps per day (Fitbit civil days)",
       "type": "timeseries",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
@@ -80,7 +80,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT t AS \"time\", max(day_total) AS \"steps\" FROM (SELECT time_bucket('1 day', time, '$timezone') AS t, device, sum(steps) AS day_total FROM health.steps WHERE $__timeFilter(time) GROUP BY 1, 2) per_device GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", steps FROM health.steps_daily WHERE $__timeFilter((day::timestamp AT TIME ZONE '$timezone')) ORDER BY 1"
         }
       ]
     },

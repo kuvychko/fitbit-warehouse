@@ -77,6 +77,16 @@ def make_parser(table: str, value_key: str, cast):
                 row = (time, cast(v), None, SOURCE, DEVICE)
             else:
                 row = (time, cast(v), SOURCE, DEVICE)
+            if table == "steps":
+                # Basis era predates the Health API: derive Fitbit-style
+                # daily totals per local day (single device, no dedup hazard)
+                day = time.astimezone(ctx.tz).date()
+                ctx.basis_daily_steps[day] = ctx.basis_daily_steps.get(day, 0) + int(v)
             yield (table, row)
 
     return parse
+
+
+def finish_steps_daily(ctx) -> Iterator[tuple[str, tuple]]:
+    for day, total in sorted(ctx.basis_daily_steps.items()):
+        yield ("steps_daily", (day, total, SOURCE, DEVICE))

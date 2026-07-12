@@ -27,6 +27,7 @@ class Ctx:
         self.tz = ZoneInfo(tz)
         self.weight_unit = weight_unit
         self.active_minutes: dict = {}
+        self.basis_daily_steps: dict = {}
 
 
 def classify(root: Path, streams, skip_patterns):
@@ -146,6 +147,12 @@ def main() -> int:
     if am_rows:
         print(f"  active_minutes_daily: {am_rows} merged day rows "
               "(the four active_minutes streams above accumulate here)")
+    sd_rows = 0
+    for table, row in googlefit.finish_steps_daily(ctx):
+        loader.add(table, row)
+        sd_rows += 1
+    if sd_rows:
+        print(f"  steps_daily: {sd_rows} Basis-era day totals")
     loader.flush()
 
     print("\n=== Skipped (recognized, intentionally not imported) ===")

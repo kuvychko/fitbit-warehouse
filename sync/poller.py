@@ -45,6 +45,11 @@ def offset_s(s: str | None) -> int:
     return int(s.rstrip("s")) if s else 0
 
 
+def opt_offset(s: str | None) -> int | None:
+    """utcOffset like "-25200s" -> seconds; None when the API omits it."""
+    return int(s.rstrip("s")) if s else None
+
+
 def civil(d: dict) -> date:
     return date(d["year"], d["month"], d["day"])
 
@@ -116,6 +121,32 @@ def pull_rollup(access, data_type, window, mapper, chunk_days=5):
         lo = mid
 
 
+def pull_daily_rollup(access, data_type, day_range, mapper, chunk_days=90):
+    """POST :dailyRollUp over civil-date chunks (Fitbit-deduplicated,
+    travel-aware civil days). end is exclusive. 90-day chunks: the API 400s
+    (INVALID_ROLLUP_QUERY_DURATION) somewhere between 90 and 180 days."""
+    civil_d = lambda d: {"year": d.year, "month": d.month, "day": d.day}
+    lo, hi = day_range
+    while lo < hi:
+        mid = min(lo + timedelta(days=chunk_days), hi)
+        # NB: no pageSize — dailyRollUp 400s (INVALID_ROLLUP_QUERY_DURATION)
+        # when pageSize exceeds what the duration allows; the default page
+        # covers our chunks and nextPageToken handles the rest.
+        body = {"range": {"start": {"date": civil_d(lo)}, "end": {"date": civil_d(mid)}}}
+        while True:
+            status, resp = api_post(
+                access, f"/users/me/dataTypes/{data_type}/dataPoints:dailyRollUp", body)
+            _check(status, data_type, resp)
+            doc = json.loads(resp)
+            for point in doc.get("rollupDataPoints", []):
+                yield from mapper(point)
+            token = doc.get("nextPageToken")
+            if not token:
+                break
+            body["pageToken"] = token
+        lo = mid
+
+
 def _check(status, data_type, body):
     if status == 429:
         raise CycleAbort(f"429 rate-limited on {data_type}")
@@ -128,33 +159,35 @@ def _check(status, data_type, body):
 def map_heart_rate(p):
     hr = p["heartRate"]
     yield ("heart_rate", (ts(hr["sampleTime"]["physicalTime"]), float(hr["beatsPerMinute"]),
-                          None, SOURCE, device_of(p)))
+                          None, SOURCE, device_of(p),
+                          opt_offset(hr["sampleTime"].get("utcOffset"))))
 
 def map_spo2(p):
     o = p["oxygenSaturation"]
     yield ("spo2", (ts(o["sampleTime"]["physicalTime"]), float(o["percentage"]),
-                    SOURCE, device_of(p)))
+                    SOURCE, device_of(p), opt_offset(o["sampleTime"].get("utcOffset"))))
 
 def map_hrv(p):
     h = p["heartRateVariability"]
     yield ("hrv", (ts(h["sampleTime"]["physicalTime"]),
                    float(h["rootMeanSquareOfSuccessiveDifferencesMilliseconds"]),
-                   None, SOURCE, device_of(p)))
+                   None, SOURCE, device_of(p), opt_offset(h["sampleTime"].get("utcOffset"))))
 
 def map_weight(p):
     w = p["weight"]
     yield ("weight", (ts(w["sampleTime"]["physicalTime"]), float(w["weightGrams"]) / 1000.0,
-                      None, SOURCE, device_of(p)))
+                      None, SOURCE, device_of(p), opt_offset(w["sampleTime"].get("utcOffset"))))
 
 def map_body_fat(p):
     b = p["bodyFat"]
     yield ("body_fat", (ts(b["sampleTime"]["physicalTime"]), float(b["percentage"]),
-                        SOURCE, device_of(p)))
+                        SOURCE, device_of(p), opt_offset(b["sampleTime"].get("utcOffset"))))
 
 def map_azm(p):
     a = p["activeZoneMinutes"]
     yield ("azm", (ts(a["interval"]["startTime"]), a["heartRateZone"],
-                   int(a["activeZoneMinutes"]), SOURCE, device_of(p)))
+                   int(a["activeZoneMinutes"]), SOURCE, device_of(p),
+                   opt_offset(a["interval"].get("startUtcOffset"))))
 
 _STAGE = {"AWAKE": "wake", "LIGHT": "light", "DEEP": "deep", "REM": "rem",
           "ASLEEP": "asleep", "RESTLESS": "restless"}
@@ -174,7 +207,8 @@ def map_sleep(p):
             asleep_s += secs
         else:
             awake_s += secs
-        yield ("sleep_stage", (ts(st["startTime"]), level, int(secs), False, SOURCE))
+        yield ("sleep_stage", (ts(st["startTime"]), level, int(secs), False, SOURCE,
+                               opt_offset(st.get("startUtcOffset") or iv.get("startUtcOffset"))))
     dur_ms = int((end - start).total_seconds() * 1000)
     yield ("sleep_session", (
         start, end, day, None, dur_ms,
@@ -182,7 +216,7 @@ def map_sleep(p):
         round(awake_s / 60) if stages else None,
         None, None, round(dur_ms / 60000), None,
         s.get("type", "").lower() or None, None, None, None,
-        SOURCE, device_of(p)))
+        SOURCE, device_of(p), opt_offset(iv.get("startUtcOffset"))))
 
 def map_daily_rhr(p):
     d = p["dailyRestingHeartRate"]
@@ -194,6 +228,11 @@ def map_daily_hrv(p):
                          d.get("averageHeartRateVariabilityMilliseconds"),
                          float(d["nonRemHeartRateBeatsPerMinute"]) if d.get("nonRemHeartRateBeatsPerMinute") else None,
                          d.get("entropy"), SOURCE))
+
+def map_daily_steps(p):
+    v = (p.get("steps") or {}).get("countSum")
+    if v is not None:
+        yield ("steps_daily", (civil(p["civilStartTime"]["date"]), int(v), SOURCE, None))
 
 def map_roll_steps(p):
     v = (p.get("steps") or {}).get("countSum")
@@ -229,6 +268,7 @@ PULLERS = [
     ("total-calories", "calories", "rollup", (map_roll_calories,)),
     ("distance", "distance", "rollup", (map_roll_distance,)),
     ("floors", "floors", "rollup", (map_roll_floors,)),
+    ("steps@daily", "steps_daily", "dailyrollup", (map_daily_steps,)),
     ("daily-resting-heart-rate", "resting_heart_rate", "daily", ("daily_resting_heart_rate.date", map_daily_rhr)),
     ("daily-heart-rate-variability", "hrv_daily", "daily", ("daily_heart_rate_variability.date", map_daily_hrv)),
 ]
@@ -277,6 +317,11 @@ def run_cycle(conn) -> None:
         elif kind == "rollup":
             (mapper,) = args
             rows = pull_rollup(access, data_type, window, mapper)
+        elif kind == "dailyrollup":
+            (mapper,) = args
+            rows = pull_daily_rollup(access, data_type.split("@")[0],
+                                     (window[0].date(), window[1].date() + timedelta(days=1)),
+                                     mapper)
         else:
             member, mapper = args
             rows = pull_daily_list(access, data_type, member,
@@ -291,10 +336,28 @@ def run_cycle(conn) -> None:
         print(f"  written: {n:>8}  {table}")
 
 
+def bootstrap_steps_daily(conn, access) -> None:
+    """One-time deep dailyRollUp walk: Fitbit era (2016-10-01) -> tomorrow."""
+    from datetime import date as _date
+    start = _date.fromisoformat(os.environ.get("BOOTSTRAP_START", "2016-10-01"))
+    end = datetime.now(timezone.utc).date() + timedelta(days=1)
+    loader = db.Loader(conn)
+    n = 0
+    for trow in pull_daily_rollup(access, "steps", (start, end), map_daily_steps):
+        loader.add(*trow)
+        n += 1
+    loader.flush()
+    print(f"  steps_daily bootstrap: {n} days parsed, "
+          f"{loader.written.get('steps_daily', 0)} rows written")
+
+
 def main() -> int:
     load_dotenv()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--once", action="store_true", help="single cycle, then exit")
+    ap.add_argument("--bootstrap-steps-daily", action="store_true",
+                    help="one-time deep dailyRollUp walk (Fitbit era -> now) "
+                         "filling steps_daily, then exit")
     args = ap.parse_args()
     interval = int(os.environ.get("POLL_INTERVAL", "7200"))
 
@@ -308,6 +371,17 @@ def main() -> int:
         print(f"ERROR: no token at {token_path()} — run `python -m sync.authorize` once",
               file=sys.stderr)
         return 2
+
+    if args.bootstrap_steps_daily:
+        access = refresh_access_token(
+            os.environ["GOOGLE_CLIENT_ID"], os.environ["GOOGLE_CLIENT_SECRET"],
+            json.loads(token_path().read_text())["refresh_token"])
+        conn = db.connect()
+        try:
+            bootstrap_steps_daily(conn, access)
+        finally:
+            conn.close()
+        return 0
 
     while True:
         started = datetime.now(timezone.utc)

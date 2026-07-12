@@ -209,5 +209,5 @@ def test_all_load_tables_exist_in_registry():
                "hrv", "device_temperature", "azm", "sleep_session", "sleep_stage",
                "sleep_score", "breathing_rate", "nightly_temperature",
                "resting_heart_rate", "active_minutes_daily", "hrv_daily",
-               "weight", "body_fat"}
+               "weight", "body_fat", "steps_daily"}
     assert emitted == set(db.TABLES)
