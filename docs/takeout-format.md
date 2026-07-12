@@ -138,3 +138,11 @@ Loaded with `source = 'googlefit-takeout'`, `device = 'Basis Peak'`.
   supported.
 - Weight values follow your Fitbit account unit; set `TAKEOUT_WEIGHT_UNIT`
   (`lbs` default, or `kg`).
+- **Concurrent recording devices — never naively sum across `device`.** The
+  steps and distance CSVs interleave multiple simultaneous recorders (e.g.
+  wearable + "MobileTrack"/"Phone Health Connect" — the phone in your pocket)
+  at offset timestamps, so all streams survive the `(time)` natural key.
+  Fitbit's app deduplicates these when showing daily totals; the raw export
+  does not. A day's total summed across devices can be 2–4× reality. Daily
+  aggregates should sum per device first and then take the max (what the
+  provisioned dashboard does), or filter to one device.

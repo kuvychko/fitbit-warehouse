@@ -6,6 +6,17 @@
   "schemaVersion": 39,
   "refresh": "",
   "time": { "from": "now-90d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "timezone",
+        "label": "Day-boundary timezone",
+        "type": "textbox",
+        "query": "America/Los_Angeles",
+        "current": { "text": "America/Los_Angeles", "value": "America/Los_Angeles" }
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -47,7 +58,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT day::timestamptz AS \"time\", bpm AS \"resting bpm\" FROM health.resting_heart_rate WHERE $__timeFilter(day::timestamptz) ORDER BY 1"
+          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", bpm AS \"resting bpm\" FROM health.resting_heart_rate WHERE $__timeFilter((day::timestamp AT TIME ZONE '$timezone')) ORDER BY 1"
         }
       ]
     },
@@ -69,7 +80,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT time_bucket('1 day', time) AS \"time\", sum(steps) AS \"steps\" FROM health.steps WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT t AS \"time\", max(day_total) AS \"steps\" FROM (SELECT time_bucket('1 day', time, '$timezone') AS t, device, sum(steps) AS day_total FROM health.steps WHERE $__timeFilter(time) GROUP BY 1, 2) per_device GROUP BY 1 ORDER BY 1"
         }
       ]
     },
@@ -91,7 +102,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT day::timestamptz AS \"time\", sum(minutes_asleep) / 60.0 AS \"asleep\" FROM health.sleep_session WHERE $__timeFilter(day::timestamptz) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", sum(minutes_asleep) / 60.0 AS \"asleep\" FROM health.sleep_session WHERE $__timeFilter((day::timestamp AT TIME ZONE '$timezone')) GROUP BY 1 ORDER BY 1"
         }
       ]
     },
@@ -113,7 +124,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT day::timestamptz AS \"time\", rmssd_ms AS \"rmssd\" FROM health.hrv_daily WHERE $__timeFilter(day::timestamptz) ORDER BY 1"
+          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", rmssd_ms AS \"rmssd\" FROM health.hrv_daily WHERE $__timeFilter((day::timestamp AT TIME ZONE '$timezone')) ORDER BY 1"
         }
       ]
     }

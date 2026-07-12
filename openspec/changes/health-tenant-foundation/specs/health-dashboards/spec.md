@@ -11,6 +11,19 @@ schema using the `health_ro` role — dashboards can never write.
 - **THEN** the datasource health check passes and the connected role cannot
   `INSERT`
 
+### Requirement: Device-aware daily aggregates
+Dashboard queries that aggregate intraday streams into daily totals SHALL NOT
+naively sum across concurrent recording devices (the export interleaves
+wearable and phone streams at offset timestamps, so all survive the natural
+key): they aggregate per device first and take the maximum, or filter to a
+single device. Daily bucket boundaries SHALL follow a user-visible timezone
+variable, not UTC.
+
+#### Scenario: Concurrent wearable and phone streams
+- **WHEN** a day contains steps rows from both a wearable and a phone stream
+- **THEN** the steps-per-day panel shows approximately the wearable's total,
+  not the sum of all streams
+
 ### Requirement: Starter dashboards spanning the seam
 The project SHALL ship at least one provisioned dashboard covering the core
 metrics (heart rate, sleep, steps) that renders continuously across the
