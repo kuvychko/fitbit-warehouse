@@ -59,17 +59,23 @@
       — done 2026-07-12: DB-driven windows (last point - 24h overlap, 30d
       cap), 13 data types (list/rollup/daily strategies), COALESCE upserts;
       verified locally: seam continuous, second cycle writes 0 intraday rows
-- [ ] 3.3 Containerize + schedule (compose service on the Pi, cron-style);
-      Healthchecks success/fail pings with unset-URL no-op
+- [x] 3.3 Containerize + schedule (compose service on the Pi, cron-style);
+      Healthchecks success/fail pings with unset-URL no-op — done 2026-07-12:
+      long-running loop container (POLL_INTERVAL=7200), profile "sync",
+      restart unless-stopped; ping code in place, URL not yet set
 - [ ] 3.4 Deploy to the Pi in shared-cluster mode; smoke: yesterday's data
       lands; overlap re-poll adds no rows; kill poller → dead-man alert fires
+      — deployed + smoke-verified 2026-07-12 (first cycle OK on NAS, seam
+      gap-free); REMAINING: create Healthchecks.io check (user), set
+      HEALTHCHECKS_PING_URL on the Pi, verify dead-man alert
 
 ## 4. Dashboards + wrap-up (health-dashboards)
 
 - [x] 4.1 Grafana provisioning: `health_ro` datasource + starter dashboard
       (HR, sleep, steps) spanning the backfill↔sync seam — verified live:
       datasource healthy, 2015 Basis + 2026 Fitbit data render, INSERT denied
-- [ ] 4.2 Verify seam: panels continuous across the boundary date; datasource
-      role cannot INSERT
+- [x] 4.2 Verify seam: panels continuous across the boundary date; datasource
+      role cannot INSERT — verified 2026-07-12: zero >30min gaps across the
+      takeout→api boundary on warehouse-db; INSERT via Pi Grafana denied
 - [ ] 4.3 README pass: quickstart proven from a fresh clone (standalone mode),
       screenshots reviewed for personal-data leakage before commit
