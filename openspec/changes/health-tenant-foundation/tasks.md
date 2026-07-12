@@ -37,11 +37,10 @@
       epochs) → same tables, `source='googlefit-takeout'`,
       `device='Basis Peak'`; skip derived/merged and phone-sensor streams
       (+ Fit/All Sessions sleep sessions discovered during verification)
-- [ ] 2.3 Load full history (shared-cluster mode against `warehouse-db`);
+- [x] 2.3 Load full history (shared-cluster mode against `warehouse-db`);
       verify counts/ranges against raw files; re-run → identical counts
-      — DONE locally in standalone mode 2026-07-11 (48M rows, 19 tables,
-      re-run byte-identical); the warehouse-db run needs NAS credentials
-      (user step)
+      — verified locally AND on warehouse-db 2026-07-11: 48M rows, 19
+      tables, totals identical across environments and across re-runs
 - [x] 2.4 Synthetic-fixture tests for parsers (no real health data in repo)
       — tests/test_parsers.py, 15 tests
 
