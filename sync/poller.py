@@ -298,6 +298,17 @@ def main() -> int:
     args = ap.parse_args()
     interval = int(os.environ.get("POLL_INTERVAL", "7200"))
 
+    missing = [v for v in ("HEALTH_RW_PW", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET")
+               if not os.environ.get(v)]
+    if missing:
+        print(f"ERROR: missing required env: {', '.join(missing)} (see .env.example)",
+              file=sys.stderr)
+        return 2
+    if not token_path().is_file():
+        print(f"ERROR: no token at {token_path()} — run `python -m sync.authorize` once",
+              file=sys.stderr)
+        return 2
+
     while True:
         started = datetime.now(timezone.utc)
         print(f"=== cycle start {started:%Y-%m-%d %H:%M:%S}Z")

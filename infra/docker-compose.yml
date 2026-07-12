@@ -18,7 +18,7 @@ services:
     profiles: ["standalone"]
     environment:
       POSTGRES_DB: ${PG_DB:-warehouse}
-      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PW:?set POSTGRES_SUPER_PW in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PW:-}
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:
@@ -43,10 +43,10 @@ services:
       # Contract naming (warehouse-cluster-contract §6): admin creds for the
       # runner; default to the bundled DB's superuser in standalone mode.
       PG_MIGRATE_USER: ${PG_MIGRATE_USER:-postgres}
-      PGPASSWORD: ${PG_MIGRATE_PASSWORD:-${POSTGRES_SUPER_PW:?set POSTGRES_SUPER_PW or PG_MIGRATE_PASSWORD in .env}}
-      HEALTH_OWNER_PW: ${HEALTH_OWNER_PW:?set HEALTH_OWNER_PW in .env}
-      HEALTH_RW_PW: ${HEALTH_RW_PW:?set HEALTH_RW_PW in .env}
-      HEALTH_RO_PW: ${HEALTH_RO_PW:?set HEALTH_RO_PW in .env}
+      PGPASSWORD: ${PG_MIGRATE_PASSWORD:-${POSTGRES_SUPER_PW:-}}
+      HEALTH_OWNER_PW: ${HEALTH_OWNER_PW:-}
+      HEALTH_RW_PW: ${HEALTH_RW_PW:-}
+      HEALTH_RO_PW: ${HEALTH_RO_PW:-}
     volumes:
       - ./migrations:/migrations:ro
     entrypoint: ["/bin/sh", "/migrations/run.sh"]
@@ -64,9 +64,9 @@ services:
       PG_HOST: ${PG_HOST:-db}
       PG_PORT: ${PG_PORT:-5432}
       PG_DB: ${PG_DB:-warehouse}
-      HEALTH_RW_PW: ${HEALTH_RW_PW:?set HEALTH_RW_PW in .env}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID in .env}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?set GOOGLE_CLIENT_SECRET in .env}
+      HEALTH_RW_PW: ${HEALTH_RW_PW:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_TOKEN_PATH: /secrets/google_token.json
       POLL_INTERVAL: ${POLL_INTERVAL:-7200}
       OVERLAP_HOURS: ${OVERLAP_HOURS:-24}
@@ -85,7 +85,7 @@ services:
       PG_HOST: ${PG_HOST:-db}
       PG_PORT: "5432"
       PG_DB: ${PG_DB:-warehouse}
-      HEALTH_RO_PW: ${HEALTH_RO_PW:?set HEALTH_RO_PW in .env}
+      HEALTH_RO_PW: ${HEALTH_RO_PW:-}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PW:-admin}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
