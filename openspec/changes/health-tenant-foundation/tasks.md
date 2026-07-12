@@ -5,8 +5,9 @@
 - [x] 0.1 Request the Google Takeout Fitbit export (user action; generation can
       take hours–days; gates 2.x) — done 2026-07-11: Fitbit (482 MB) + Google
       Fit (11 MB, Basis Peak) zips in `data/`, verified complete
-- [ ] 0.2 Create the Google Cloud project + OAuth 2.0 client in testing mode
-      (user action with guided steps; gates 3.1)
+- [x] 0.2 Create the Google Cloud project + OAuth 2.0 client in testing mode
+      (user action with guided steps; gates 3.1) — done 2026-07-12; desktop
+      client + 3 readonly restricted scopes
 
 ## 1. Database foundation (health-schema)
 
@@ -46,10 +47,12 @@
 
 ## 3. Google Health API sync (health-api-sync)
 
-- [ ] 3.1 **Spike (gates the rest of phase 3)**: interactive OAuth flow in
+- [x] 3.1 **Spike (gates the rest of phase 3)**: interactive OAuth flow in
       testing mode, refresh token stored at `GOOGLE_TOKEN_PATH`, one successful
       data-type read; document findings (scopes, quotas, data-type shapes) in
-      `docs/health-api-notes.md`
+      `docs/health-api-notes.md` — done 2026-07-12: sync/authorize.py; live
+      200s on heart-rate list + steps dailyRollUp; 7-day testing-mode token
+      expiry is the open risk (recheck ~07-19; escape hatch documented)
 - [ ] 3.2 `sync/` poller: thin API client, per-data-type pullers, catch-up
       window (default 7d), natural-key upserts (DO UPDATE for daily summaries,
       DO NOTHING for immutable intraday), 429/Retry-After handling
