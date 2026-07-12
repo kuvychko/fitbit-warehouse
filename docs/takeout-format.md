@@ -133,7 +133,10 @@ Loaded with `source = 'googlefit-takeout'`, `device = 'Basis Peak'`.
 - Every stored timestamp is UTC (`timestamptz`). Streams with naive local
   timestamps (AZM, temperature, sleep + weight JSON) are converted using the
   timezone configured for the loader (`TAKEOUT_TZ`, e.g.
-  `America/Los_Angeles`) — Takeout does not embed it. If you changed timezones
+  `America/Los_Angeles`) — Takeout does not embed it. **The loader refuses to
+  run without it**: an unset timezone once silently shifted every one of
+  these streams by 7 hours (confirmed against the Health API's UTC sleep
+  sessions, which is also how you can sanity-check yours). If you changed timezones
   over the years, pick the one you lived in most; per-period overrides are not
   supported.
 - Weight values follow your Fitbit account unit; set `TAKEOUT_WEIGHT_UNIT`

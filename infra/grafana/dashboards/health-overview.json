@@ -102,7 +102,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", sum(minutes_asleep) / 60.0 AS \"asleep\" FROM health.sleep_session WHERE $__timeFilter((day::timestamp AT TIME ZONE '$timezone')) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT t AS \"time\", max(asleep) AS \"asleep\" FROM (SELECT (day::timestamp AT TIME ZONE '$timezone') AS t, source, sum(minutes_asleep) / 60.0 AS asleep FROM health.sleep_session WHERE $__timeFilter((day::timestamp AT TIME ZONE '$timezone')) GROUP BY 1, 2) per_source GROUP BY 1 ORDER BY 1"
         }
       ]
     },

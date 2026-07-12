@@ -89,7 +89,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="backfill", description=__doc__)
     ap.add_argument("--takeout-dir", default=os.environ.get("TAKEOUT_DIR"))
     ap.add_argument("--googlefit-dir", default=os.environ.get("GOOGLEFIT_DIR"))
-    ap.add_argument("--tz", default=os.environ.get("TAKEOUT_TZ", "UTC"))
+    # No default on purpose: several streams carry naive local timestamps, and
+    # silently assuming UTC corrupts them by the UTC offset (learned the hard
+    # way). The loader refuses to guess.
+    ap.add_argument("--tz", default=os.environ.get("TAKEOUT_TZ"))
     ap.add_argument("--weight-unit", default=os.environ.get("TAKEOUT_WEIGHT_UNIT", "lbs"),
                     choices=("lbs", "kg"))
     ap.add_argument("--only", help="comma-separated stream names (default: all)")
@@ -99,6 +102,10 @@ def main() -> int:
 
     if not args.takeout_dir and not args.googlefit_dir:
         ap.error("set --takeout-dir/TAKEOUT_DIR (and/or --googlefit-dir/GOOGLEFIT_DIR)")
+    if not args.tz:
+        ap.error("set --tz or TAKEOUT_TZ (IANA zone your Fitbit profile used, "
+                 "e.g. America/Los_Angeles) — required to convert the export's "
+                 "naive local timestamps; see docs/takeout-format.md")
 
     ctx = Ctx(args.tz, args.weight_unit)
     only = set(args.only.split(",")) if args.only else None
