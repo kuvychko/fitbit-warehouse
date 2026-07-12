@@ -52,6 +52,30 @@ services:
     entrypoint: ["/bin/sh", "/migrations/run.sh"]
     restart: "no"
 
+  # Google Health API poller. Opt-in profile: needs a one-time interactive
+  # OAuth (python -m sync.authorize) to create secrets/google_token.json first.
+  #   docker compose --profile sync up -d --build sync
+  sync:
+    build:
+      context: ..
+      dockerfile: infra/sync.Dockerfile
+    profiles: ["sync"]
+    environment:
+      PG_HOST: ${PG_HOST:-db}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_DB: ${PG_DB:-warehouse}
+      HEALTH_RW_PW: ${HEALTH_RW_PW:?set HEALTH_RW_PW in .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID in .env}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?set GOOGLE_CLIENT_SECRET in .env}
+      GOOGLE_TOKEN_PATH: /secrets/google_token.json
+      POLL_INTERVAL: ${POLL_INTERVAL:-7200}
+      OVERLAP_HOURS: ${OVERLAP_HOURS:-24}
+      CATCHUP_CAP_DAYS: ${CATCHUP_CAP_DAYS:-30}
+      HEALTHCHECKS_PING_URL: ${HEALTHCHECKS_PING_URL:-}
+    volumes:
+      - ../secrets:/secrets:ro
+    restart: unless-stopped
+
   # Bundled Grafana for standalone mode. Shared-cluster users typically point
   # an existing Grafana at the same provisioning files instead.
   grafana:

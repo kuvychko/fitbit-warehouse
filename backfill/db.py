@@ -115,8 +115,13 @@ class Loader:
                 for row in rows:
                     copy.write_row(row)
             if spec.action == "update":
+                # COALESCE: a revision wins where it has a value, but never
+                # nulls out an enrichment another source provided (e.g. the
+                # API poller re-pulling a sleep session the Takeout backfill
+                # loaded with efficiency/levels the API does not carry).
                 sets = ", ".join(
-                    f"{c} = EXCLUDED.{c}" for c in spec.cols if c not in spec.key
+                    f"{c} = COALESCE(EXCLUDED.{c}, {table}.{c})"
+                    for c in spec.cols if c not in spec.key
                 )
                 conflict = f"DO UPDATE SET {sets}"
             else:

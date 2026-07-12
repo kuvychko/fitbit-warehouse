@@ -64,6 +64,28 @@ unless marked *open*. Sample values are synthesized.
 - Rate limits: 300 req/min/user, huge per-project quota; 429 + `Retry-After`
   on excess. A daily poller is nowhere near any of this.
 
+## Poller findings (2026-07-12, all verified live)
+
+- **Not every data type supports `list`**: `total-calories` and `floors`
+  reject it (rollup-only); `steps`/`distance` accept it but return no points
+  for wearable data. The poller pulls those four via `:rollUp` with
+  `windowSize: "60s"` — minutely grain matching the Takeout-era tables.
+- **`dataSourceFamily: users/me/dataSourceFamilies/google-wearables`** on
+  rollups excludes phone streams — the server-side answer to the
+  multi-device double-count (`all-sources` is the default and sums devices!).
+  Rollup rows carry no device name → `device` is NULL for API rollup rows.
+- Rollup range caps: 14 days for heart-rate/total-calories/active-minutes
+  et al. — the poller chunks windows to 5 days.
+- Units differ from Takeout: `distance` rollups are **millimeters**
+  (Takeout CSV: meters), `weight` is **grams** (Takeout JSON: account unit,
+  usually lbs). Mappers normalize to meters/kg.
+- Sleep sessions arrive with typed stages (AWAKE/LIGHT/DEEP/REM) but none of
+  the classic-export enrichments (efficiency, minutesToFallAsleep, …); the
+  upsert COALESCEs so API re-pulls never null-out Takeout-loaded fields.
+- Breathing rate, computed/device temperature, and daily activity minutes
+  have no listable/rollup-able API data type (as of v4 today) — those tables
+  stay Takeout-only for now.
+
 ## Open items / risks
 
 - **Testing-mode refresh tokens expire after 7 days** (docs). Ours was minted

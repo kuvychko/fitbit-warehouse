@@ -53,9 +53,12 @@
       `docs/health-api-notes.md` — done 2026-07-12: sync/authorize.py; live
       200s on heart-rate list + steps dailyRollUp; 7-day testing-mode token
       expiry is the open risk (recheck ~07-19; escape hatch documented)
-- [ ] 3.2 `sync/` poller: thin API client, per-data-type pullers, catch-up
+- [x] 3.2 `sync/` poller: thin API client, per-data-type pullers, catch-up
       window (default 7d), natural-key upserts (DO UPDATE for daily summaries,
       DO NOTHING for immutable intraday), 429/Retry-After handling
+      — done 2026-07-12: DB-driven windows (last point - 24h overlap, 30d
+      cap), 13 data types (list/rollup/daily strategies), COALESCE upserts;
+      verified locally: seam continuous, second cycle writes 0 intraday rows
 - [ ] 3.3 Containerize + schedule (compose service on the Pi, cron-style);
       Healthchecks success/fail pings with unset-URL no-op
 - [ ] 3.4 Deploy to the Pi in shared-cluster mode; smoke: yesterday's data
