@@ -14,13 +14,26 @@ name: fitbit-warehouse
 
 services:
   db:
-    image: timescale/timescaledb:2.17.2-pg17
+    # HA community tag (not -oss: keeps compression + timescaledb_toolkit;
+    # not -all: single PG major, smaller image). Same pin as the homelab
+    # platform's warehouse-db, so standalone and shared modes match.
+    # BREAKING (2026-07): moved off the Alpine timescaledb image, which never
+    # shipped timescaledb_toolkit. musl->glibc means an existing db-data
+    # volume from the old image cannot be reused — start a fresh volume and
+    # re-run migrations/backfill (both idempotent).
+    image: timescale/timescaledb-ha:pg17.10-ts2.28.2
     profiles: ["standalone"]
     environment:
       POSTGRES_DB: ${PG_DB:-warehouse}
       POSTGRES_PASSWORD: ${POSTGRES_SUPER_PW:-}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      # HA image (Spilo-derived) keeps PGDATA at /home/postgres/pgdata/data;
+      # mount the parent dir, not /var/lib/postgresql/data. New volume name
+      # (not db-data): the old Alpine-image volume's files sit at a
+      # different layout and must not be reused (see BREAKING note above);
+      # a distinct name also leaves the old volume untouched as an automatic
+      # rollback point until it's manually removed post-cutover.
+      - db-data-ts2:/home/postgres/pgdata
     ports:
       - "${PG_PORT:-5432}:5432"
     healthcheck:
@@ -34,7 +47,8 @@ services:
   # Every migration is idempotent, so the runner just applies all of them
   # on every invocation — there is no version table to get out of sync.
   migrate:
-    image: timescale/timescaledb:2.17.2-pg17
+    # Same pin as db (client tools must match); see db's comment above.
+    image: timescale/timescaledb-ha:pg17.10-ts2.28.2
     profiles: ["migrate"]
     environment:
       PG_HOST: ${PG_HOST:-db}
@@ -96,5 +110,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  db-data:
+  db-data-ts2:
   grafana-data:

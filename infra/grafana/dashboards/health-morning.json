@@ -1,0 +1,233 @@
+{
+  "uid": "health-morning",
+  "title": "Morning Report",
+  "tags": ["health", "fitbit-warehouse"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "timezone",
+        "label": "Day-boundary timezone",
+        "type": "textbox",
+        "query": "America/Los_Angeles",
+        "current": { "text": "America/Los_Angeles", "value": "America/Los_Angeles" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Data as of",
+      "description": "Newest synced sample across last night's sleep, HRV, breathing rate, and skin temperature. If this is more than a few hours old, the poller hasn't caught up yet — the panels below may still show the prior night.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "dateTimeFromNow", "color": { "mode": "fixed", "fixedColor": "#898781" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT GREATEST(\n  (SELECT max(end_time) FROM health.sleep_session),\n  (SELECT max(sleep_end) FROM health.breathing_rate),\n  (SELECT max(sleep_start) FROM health.nightly_temperature)\n) AS \"latest sync\""
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Last night's hypnogram",
+      "type": "state-timeline",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": [
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "deep" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "light" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "rem" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "wake" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eda100" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "asleep" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "restless" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eda100" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "awake" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#e34948" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH last_night AS (\n  SELECT start_time, end_time FROM health.sleep_session\n  WHERE main_sleep ORDER BY start_time DESC LIMIT 1\n)\nSELECT stg.time, stg.level\nFROM health.sleep_stage stg, last_night ln\nWHERE stg.time >= ln.start_time AND stg.time < ln.end_time AND NOT stg.is_short\nORDER BY stg.time"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Sleep score",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 11 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "thresholds": { "mode": "absolute", "steps": [
+          { "color": "#d03b3b", "value": null },
+          { "color": "#fab219", "value": 60 },
+          { "color": "#0ca30c", "value": 80 }
+        ] } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH last_night AS (SELECT log_id FROM health.sleep_session WHERE main_sleep ORDER BY start_time DESC LIMIT 1)\nSELECT sc.overall AS score FROM health.sleep_score sc JOIN last_night ln ON ln.log_id = sc.sleep_log_id"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Sleep duration & efficiency",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 11 },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round(minutes_asleep / 60.0, 1) AS \"hours asleep\", efficiency AS \"efficiency %\"\nFROM health.sleep_session WHERE main_sleep ORDER BY start_time DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "HRV vs 30d baseline",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+          { "color": "#d03b3b", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#0ca30c", "value": 0 }
+        ] } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT value AS \"rmssd (ms)\", value - median AS \"vs 30d median\"\nFROM health.daily_baseline WHERE metric = 'hrv_rmssd' ORDER BY day DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Resting HR vs 30d baseline",
+      "description": "Lower than baseline generally reads as a good recovery sign.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 17 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+          { "color": "#0ca30c", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#d03b3b", "value": 0 }
+        ] } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT value AS \"resting bpm\", value - median AS \"vs 30d median\"\nFROM health.daily_baseline WHERE metric = 'resting_hr' ORDER BY day DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Breathing rate vs 30d baseline",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 17 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+          { "color": "#0ca30c", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#d03b3b", "value": 0 }
+        ] } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT value AS \"breaths/min\", value - median AS \"vs 30d median\"\nFROM health.daily_baseline WHERE metric = 'breathing_rate' ORDER BY day DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Skin temperature deviation vs 30d baseline",
+      "description": "An elevated deviation above the usual baseline can be an early illness signal.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 17 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+          { "color": "#0ca30c", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#d03b3b", "value": 0 }
+        ] } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT value AS \"skin temp (C)\", value - median AS \"vs 30d median\"\nFROM health.daily_baseline WHERE metric = 'nightly_temp' ORDER BY day DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Yesterday's heart rate",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 23 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 6, "spanNulls": false },
+          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time_bucket('5 minutes', time) AS \"time\", avg(bpm) AS bpm\nFROM health.heart_rate\nWHERE time >= ((now() AT TIME ZONE '$timezone')::date - 1) AND time < (now() AT TIME ZONE '$timezone')::date\nGROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Yesterday's activity",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 23 },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  (SELECT steps FROM health.steps_daily WHERE day = (now() AT TIME ZONE '$timezone')::date - 1) AS \"steps\",\n  (SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2 + sum(minutes) FILTER (WHERE zone = 'FAT_BURN')\n     FROM health.azm_hourly\n     WHERE hour >= (now() AT TIME ZONE '$timezone')::date - 1 AND hour < (now() AT TIME ZONE '$timezone')::date) AS \"AZM\""
+        }
+      ]
+    }
+  ]
+}

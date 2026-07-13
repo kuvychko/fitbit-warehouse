@@ -1,0 +1,204 @@
+{
+  "uid": "health-scoreboard",
+  "title": "Health Scoreboard (30 days)",
+  "tags": ["health", "fitbit-warehouse"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "timezone",
+        "label": "Day-boundary timezone",
+        "type": "textbox",
+        "query": "America/Los_Angeles",
+        "current": { "text": "America/Los_Angeles", "value": "America/Los_Angeles" }
+      },
+      {
+        "name": "steps_goal",
+        "label": "Daily steps goal",
+        "type": "textbox",
+        "query": "8000",
+        "current": { "text": "8000", "value": "8000" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Current streak (days ≥ goal)",
+      "description": "Consecutive civil days (in $timezone) ending yesterday with steps ≥ $steps_goal. Today is excluded while still in progress.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "#0ca30c" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH anchor AS (\n  SELECT LEAST(max(day), ((now() AT TIME ZONE '$timezone')::date - 1)) AS d FROM health.steps_daily\n), days AS (\n  SELECT generate_series((SELECT d FROM anchor)::timestamp, (SELECT d FROM anchor)::timestamp - INTERVAL '400 days', INTERVAL '-1 day')::date AS day\n), ranked AS (\n  SELECT d.day, COALESCE(s.steps, 0) >= $steps_goal AS hit, row_number() OVER (ORDER BY d.day DESC) AS rn\n  FROM days d LEFT JOIN health.steps_daily s ON s.day = d.day\n), first_miss AS (\n  SELECT min(rn) AS rn FROM ranked WHERE NOT hit\n)\nSELECT COALESCE((SELECT rn - 1 FROM first_miss), count(*)) AS current_streak FROM ranked"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Today so far",
+      "description": "In-progress civil day (in $timezone); not counted toward the streak until it's complete.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+          { "color": "#d03b3b", "value": null },
+          { "color": "#fab219", "value": 4000 },
+          { "color": "#0ca30c", "value": 8000 }
+        ] } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(steps, 0) AS \"today's steps\" FROM health.steps_daily WHERE day = (now() AT TIME ZONE '$timezone')::date"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "This week vs 30d baseline",
+      "description": "Trailing 7 civil days' average steps vs. the 30-day median (health.daily_baseline).",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "#d03b3b", "value": null },
+            { "color": "#898781", "value": -0.0001 },
+            { "color": "#0ca30c", "value": 0 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT avg(value) - avg(median) AS \"steps vs baseline (7d avg)\"\nFROM health.daily_baseline\nWHERE metric = 'steps' AND day > (now() AT TIME ZONE '$timezone')::date - 7 AND day <= (now() AT TIME ZONE '$timezone')::date"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Personal bests (last 30 days)",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'Best step day' AS metric, max(steps)::text AS value FROM health.steps_daily WHERE $__timeFilter(day::timestamp)\nUNION ALL\nSELECT 'Best sleep score', max(sc.overall)::text FROM health.sleep_score sc JOIN health.sleep_session ss ON ss.log_id = sc.sleep_log_id WHERE ss.main_sleep AND $__timeFilter(ss.day::timestamp)\nUNION ALL\nSELECT 'Lowest resting HR', min(bpm)::text FROM health.resting_heart_rate WHERE $__timeFilter(day::timestamp)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Daily steps vs goal (last 30 days)",
+      "description": "One block per civil day (in $timezone): green ≥ goal, yellow ≥ half goal, red below.",
+      "type": "state-timeline",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "#d03b3b", "value": null },
+            { "color": "#fab219", "value": 0 },
+            { "color": "#0ca30c", "value": 1 }
+          ] },
+          "mappings": [
+            { "type": "range", "options": { "from": 0, "to": 0.999, "result": { "text": "below half" } } },
+            { "type": "range", "options": { "from": 1, "to": 1.999, "result": { "text": "half to goal" } } },
+            { "type": "range", "options": { "from": 2, "to": 2.999, "result": { "text": "goal met" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n  CASE WHEN steps >= $steps_goal THEN 2 WHEN steps >= $steps_goal / 2 THEN 1 ELSE 0 END AS status\nFROM health.steps_daily WHERE $__timeFilter(day::timestamp) ORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Week-over-week deltas vs 30d baseline",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 60 },
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "#d03b3b", "value": null },
+            { "color": "#0ca30c", "value": 0 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", value - median AS \"steps vs 30d median\"\nFROM health.daily_baseline WHERE metric = 'steps' AND $__timeFilter(day::timestamp) ORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Active Zone Minutes — trailing 7 days (WHO 150 min/week guideline)",
+      "description": "AZM already applies Fitbit's own WHO-aligned weighting (Fat Burn ×1, Cardio/Peak ×2).",
+      "type": "gauge",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none", "min": 0, "max": 150,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "#d03b3b", "value": null },
+            { "color": "#fab219", "value": 75 },
+            { "color": "#0ca30c", "value": 150 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2\n     + sum(minutes) FILTER (WHERE zone = 'FAT_BURN') AS \"AZM (7d, WHO-weighted)\"\nFROM health.azm_hourly\nWHERE hour >= (now() AT TIME ZONE '$timezone')::date - 6 AND hour < (now() AT TIME ZONE '$timezone')::date + 1"
+        }
+      ]
+    }
+  ]
+}

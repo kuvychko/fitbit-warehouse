@@ -1,0 +1,383 @@
+{
+  "uid": "health-trends",
+  "title": "Health Trends (multi-year)",
+  "tags": ["health", "fitbit-warehouse"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": { "from": "now-5y", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "timezone",
+        "label": "Day-boundary timezone",
+        "type": "textbox",
+        "query": "America/Los_Angeles",
+        "current": { "text": "America/Los_Angeles", "value": "America/Los_Angeles" }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Device era 1",
+        "enable": true,
+        "iconColor": "#2a78d6",
+        "datasource": { "type": "postgres", "uid": "health-postgres" },
+        "target": {
+          "rawQuery": true,
+          "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 1"
+        }
+      },
+      {
+        "name": "Device era 2",
+        "enable": true,
+        "iconColor": "#1baf7a",
+        "datasource": { "type": "postgres", "uid": "health-postgres" },
+        "target": {
+          "rawQuery": true,
+          "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 2"
+        }
+      },
+      {
+        "name": "Device era 3",
+        "enable": true,
+        "iconColor": "#eda100",
+        "datasource": { "type": "postgres", "uid": "health-postgres" },
+        "target": {
+          "rawQuery": true,
+          "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 3"
+        }
+      },
+      {
+        "name": "Device era 4",
+        "enable": true,
+        "iconColor": "#4a3aa7",
+        "datasource": { "type": "postgres", "uid": "health-postgres" },
+        "target": {
+          "rawQuery": true,
+          "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 4"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Heart rate — daily percentile band (p25–p75, 28d smoothed)",
+      "description": "Median line with p25–p75 band, computed from hourly percentile_agg() sketches rolled up to civil days in $timezone, then smoothed with a 28-day rolling average. Robust to sensor glitches: never raw min/max.",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "p75_28d" },
+            "properties": [
+              { "id": "custom.fillBelowTo", "value": "p25_28d" },
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "custom.fillOpacity", "value": 20 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } },
+              { "id": "displayName", "value": "p75" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p25_28d" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } },
+              { "id": "displayName", "value": "p25" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "median_28d" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 2 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } },
+              { "id": "displayName", "value": "median" }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH daily AS (\n  SELECT\n    (hour AT TIME ZONE '$timezone')::date AS day,\n    approx_percentile(0.25, rollup(bpm_agg)) AS p25,\n    approx_percentile(0.5,  rollup(bpm_agg)) AS median,\n    approx_percentile(0.75, rollup(bpm_agg)) AS p75,\n    sum(samples) AS samples\n  FROM health.heart_rate_hourly\n  WHERE $__timeFilter(hour)\n  GROUP BY 1\n  HAVING sum(samples) >= 30\n)\nSELECT\n  (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n  avg(p25)    OVER w AS p25_28d,\n  avg(median) OVER w AS median_28d,\n  avg(p75)    OVER w AS p75_28d\nFROM daily\nWINDOW w AS (ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW)\nORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Resting heart rate (28d avg)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true },
+          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH daily AS (\n  SELECT day, bpm FROM health.resting_heart_rate WHERE $__timeFilter(day::timestamp)\n)\nSELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n       avg(bpm) OVER (ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW) AS \"resting bpm (28d avg)\"\nFROM daily ORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Weight",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "pointSize": 5, "showPoints": "always", "fillOpacity": 0, "spanNulls": false },
+          "color": { "mode": "fixed", "fixedColor": "#1baf7a" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, weight_kg AS \"weight (kg)\" FROM health.weight WHERE $__timeFilter(time) ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Sleep duration (28d avg)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true },
+          "color": { "mode": "fixed", "fixedColor": "#4a3aa7" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH per_source AS (\n  SELECT day, source, sum(minutes_asleep) / 60.0 AS asleep\n  FROM health.sleep_session WHERE $__timeFilter(day::timestamp)\n  GROUP BY 1, 2\n), daily AS (\n  SELECT day, max(asleep) AS asleep FROM per_source GROUP BY 1\n)\nSELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n       avg(asleep) OVER (ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW) AS \"hours asleep (28d avg)\"\nFROM daily ORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Sleep composition (28d avg minutes per stage)",
+      "description": "Stages-era nights only (levels_summary present with the stages vocabulary). Classic-era nights don't distinguish deep/light/REM.",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "custom": { "drawStyle": "line", "lineWidth": 0, "fillOpacity": 60, "stacking": { "mode": "normal", "group": "A" }, "spanNulls": true }
+        },
+        "overrides": [
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "deep" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "light" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "rem" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH per_night AS (\n  SELECT day, level, sum(minutes) AS minutes\n  FROM health.sleep_composition\n  WHERE $__timeFilter(day::timestamp) AND level IN ('deep', 'light', 'rem')\n  GROUP BY 1, 2\n)\nSELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", level,\n       avg(minutes) OVER (PARTITION BY level ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW) AS minutes\nFROM per_night ORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Nightly HRV — rmssd (28d avg)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true },
+          "color": { "mode": "fixed", "fixedColor": "#eb6834" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH daily AS (\n  SELECT day, rmssd_ms FROM health.hrv_daily WHERE $__timeFilter(day::timestamp) AND rmssd_ms IS NOT NULL\n)\nSELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n       avg(rmssd_ms) OVER (ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW) AS \"rmssd (28d avg)\"\nFROM daily ORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Activity volume (28d avg minutes by intensity)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "custom": { "drawStyle": "line", "lineWidth": 0, "fillOpacity": 60, "stacking": { "mode": "normal", "group": "A" }, "spanNulls": true }
+        },
+        "overrides": [
+          { "matcher": { "id": "byValue", "options": { "prop": "category", "value": "lightly" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9ec5f4" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "category", "value": "moderately" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eda100" } }] },
+          { "matcher": { "id": "byValue", "options": { "prop": "category", "value": "very" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#e34948" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH daily AS (\n  SELECT day, 'lightly' AS category, lightly_min AS minutes FROM health.active_minutes_daily WHERE $__timeFilter(day::timestamp)\n  UNION ALL\n  SELECT day, 'moderately', moderately_min FROM health.active_minutes_daily WHERE $__timeFilter(day::timestamp)\n  UNION ALL\n  SELECT day, 'very', very_min FROM health.active_minutes_daily WHERE $__timeFilter(day::timestamp)\n)\nSELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", category,\n       avg(minutes) OVER (PARTITION BY category ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW) AS minutes\nFROM daily ORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Year-over-year — daily steps by day-of-year",
+      "description": "Each point is one calendar day; x is day-of-year so every year overlays on a common axis, colored by year. A scatter (not connected lines) to keep a decade of overlapping series legible.",
+      "type": "xychart",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 33 },
+      "fieldConfig": {
+        "defaults": { "custom": { "pointSize": { "fixed": 4 } } },
+        "overrides": []
+      },
+      "options": {
+        "series": [
+          { "x": "day_of_year", "y": "steps", "pointColor": { "field": "year" } }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  extract(doy from day)::int AS day_of_year,\n  extract(year from day)::text AS year,\n  steps\nFROM health.steps_daily\nWHERE $__timeFilter(day::timestamp)\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Seasonality — average daily steps by month",
+      "type": "barchart",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 42 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT to_char(day, 'Mon') AS month, avg(steps) AS \"avg steps\"\nFROM health.steps_daily\nWHERE $__timeFilter(day::timestamp)\nGROUP BY to_char(day, 'Mon'), extract(month from day)\nORDER BY extract(month from day)"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Correlation: 28d avg steps → weigh-in weight",
+      "description": "X = trailing 28-day average daily steps ending the day before each weigh-in. Y = weight. Correlation, not causation; color = year.",
+      "type": "xychart",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 50 },
+      "fieldConfig": {
+        "defaults": { "custom": { "pointSize": { "fixed": 5 } } },
+        "overrides": []
+      },
+      "options": {
+        "series": [
+          { "x": "avg_steps_28d", "y": "weight_kg", "pointColor": { "field": "year" } }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  w.time AS weigh_in,\n  extract(year from w.time)::text AS year,\n  (SELECT avg(sd.steps) FROM health.steps_daily sd WHERE sd.day >= (w.time::date - 28) AND sd.day < w.time::date) AS avg_steps_28d,\n  w.weight_kg\nFROM health.weight w\nWHERE $__timeFilter(w.time)\nORDER BY w.time"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Correlation: previous-day activity → sleep score",
+      "description": "X = previous civil day's step total. Y = that night's Fitbit sleep score. Correlation, not causation; color = year.",
+      "type": "xychart",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 50 },
+      "fieldConfig": {
+        "defaults": { "custom": { "pointSize": { "fixed": 5 } } },
+        "overrides": []
+      },
+      "options": {
+        "series": [
+          { "x": "prev_day_steps", "y": "sleep_score", "pointColor": { "field": "year" } }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  ss.day AS night,\n  extract(year from ss.day)::text AS year,\n  (SELECT sd.steps FROM health.steps_daily sd WHERE sd.day = ss.day - 1) AS prev_day_steps,\n  sc.overall AS sleep_score\nFROM health.sleep_session ss\nJOIN health.sleep_score sc ON sc.sleep_log_id = ss.log_id\nWHERE ss.main_sleep AND $__timeFilter(ss.day::timestamp)\nORDER BY ss.day"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Correlation: 28d avg activity → resting heart rate",
+      "description": "X = trailing 28-day average daily steps ending the day before. Y = that day's resting heart rate. Correlation, not causation; color = year.",
+      "type": "xychart",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 50 },
+      "fieldConfig": {
+        "defaults": { "custom": { "pointSize": { "fixed": 5 } } },
+        "overrides": []
+      },
+      "options": {
+        "series": [
+          { "x": "avg_steps_28d", "y": "resting_hr", "pointColor": { "field": "year" } }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  r.day AS day,\n  extract(year from r.day)::text AS year,\n  (SELECT avg(sd.steps) FROM health.steps_daily sd WHERE sd.day >= (r.day - 28) AND sd.day < r.day) AS avg_steps_28d,\n  r.bpm AS resting_hr\nFROM health.resting_heart_rate r\nWHERE $__timeFilter(r.day::timestamp)\nORDER BY r.day"
+        }
+      ]
+    }
+  ]
+}
