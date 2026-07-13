@@ -127,6 +127,51 @@
           "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", rmssd_ms AS \"rmssd\" FROM health.hrv_daily WHERE $__timeFilter((day::timestamp AT TIME ZONE '$timezone')) ORDER BY 1"
         }
       ]
+    },
+    {
+      "id": 6,
+      "title": "Sleep score",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "max": 100,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, overall AS \"sleep score\" FROM health.sleep_score WHERE $__timeFilter(time) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Breathing rate (nightly)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT sleep_end AS \"time\", full_bpm AS \"breaths/min\" FROM health.breathing_rate WHERE $__timeFilter(sleep_end) ORDER BY 1"
+        }
+      ]
     }
   ]
 }

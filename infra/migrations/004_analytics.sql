@@ -170,7 +170,16 @@ UNION ALL
 SELECT COALESCE(ss.day, (br.sleep_end AT TIME ZONE 'UTC')::date),
        'breathing_rate', br.full_bpm::double precision
 FROM health.breathing_rate br
-LEFT JOIN health.sleep_session ss ON ss.end_time = br.sleep_end
+LEFT JOIN LATERAL (
+    -- breathing_rate.sleep_end is rounded coarser than sleep_session.end_time
+    -- (observed offsets up to a few minutes, never exact) — a window join
+    -- picking the closest session recovers the correct Fitbit-civil day;
+    -- exact equality only matched ~4% of real rows.
+    SELECT day FROM health.sleep_session
+    WHERE end_time BETWEEN br.sleep_end - INTERVAL '3 hours' AND br.sleep_end + INTERVAL '3 hours'
+    ORDER BY abs(extract(epoch FROM end_time - br.sleep_end))
+    LIMIT 1
+) ss ON true
 WHERE br.full_bpm IS NOT NULL
 UNION ALL
 SELECT COALESCE(ss.day, (nt.sleep_start AT TIME ZONE 'UTC')::date),
