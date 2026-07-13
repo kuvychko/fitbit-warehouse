@@ -76,7 +76,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": 259200000 }
         },
         "overrides": [
           {
@@ -144,7 +144,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": 259200000 }
         },
         "overrides": [
           {
@@ -211,7 +211,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": 259200000 },
           "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
         },
         "overrides": []
@@ -257,7 +257,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "h",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": 259200000 },
           "color": { "mode": "fixed", "fixedColor": "#4a3aa7" }
         },
         "overrides": []
@@ -281,7 +281,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "m",
-          "custom": { "drawStyle": "line", "lineWidth": 0, "fillOpacity": 60, "stacking": { "mode": "normal", "group": "A" }, "spanNulls": true }
+          "custom": { "drawStyle": "line", "lineWidth": 0, "fillOpacity": 60, "stacking": { "mode": "normal", "group": "A" }, "spanNulls": 259200000 }
         },
         "overrides": [
           { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "deep" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } }] },
@@ -307,7 +307,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": 259200000 },
           "color": { "mode": "fixed", "fixedColor": "#eb6834" }
         },
         "overrides": []
@@ -330,7 +330,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "m",
-          "custom": { "drawStyle": "line", "lineWidth": 0, "fillOpacity": 60, "stacking": { "mode": "normal", "group": "A" }, "spanNulls": true }
+          "custom": { "drawStyle": "line", "lineWidth": 0, "fillOpacity": 60, "stacking": { "mode": "normal", "group": "A" }, "spanNulls": 259200000 }
         },
         "overrides": [
           { "matcher": { "id": "byValue", "options": { "prop": "category", "value": "lightly" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9ec5f4" } }] },
