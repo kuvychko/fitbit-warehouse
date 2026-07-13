@@ -116,46 +116,44 @@
     {
       "id": 5,
       "title": "Daily steps vs goal (last 30 days)",
-      "description": "One block per civil day (in $timezone): green ≥ goal, yellow ≥ half goal, red below.",
-      "type": "state-timeline",
+      "description": "One bar per civil day (in $timezone), height = steps, colored by progress toward the goal: green ≥ goal, yellow ≥ half goal, red below. Threshold colors are fixed at half/full of the default goal (4000/8000) and won't move if you change $steps_goal.",
+      "type": "barchart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 6 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
       "fieldConfig": {
         "defaults": {
           "unit": "none",
           "color": { "mode": "thresholds" },
           "thresholds": { "mode": "absolute", "steps": [
             { "color": "#d03b3b", "value": null },
-            { "color": "#fab219", "value": 0 },
-            { "color": "#0ca30c", "value": 1 }
-          ] },
-          "mappings": [
-            { "type": "range", "options": { "from": 0, "to": 0.999, "result": { "text": "below half" } } },
-            { "type": "range", "options": { "from": 1, "to": 1.999, "result": { "text": "half to goal" } } },
-            { "type": "range", "options": { "from": 2, "to": 2.999, "result": { "text": "goal met" } } }
-          ]
+            { "color": "#fab219", "value": 4000 },
+            { "color": "#0ca30c", "value": 8000 }
+          ] }
         },
         "overrides": []
+      },
+      "options": {
+        "xTickLabelRotation": -45
       },
       "targets": [
         {
           "refId": "A",
-          "format": "time_series",
+          "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n  CASE WHEN steps >= $steps_goal THEN 2 WHEN steps >= $steps_goal / 2 THEN 1 ELSE 0 END AS status\nFROM health.steps_daily WHERE $__timeFilter(day::timestamp) ORDER BY day"
+          "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", steps\nFROM health.steps_daily WHERE $__timeFilter(day::timestamp) ORDER BY day"
         }
       ]
     },
     {
       "id": 6,
       "title": "Week-over-week deltas vs 30d baseline",
-      "type": "timeseries",
+      "description": "One bar per day, colored red/green by its own sign — a plain timeseries panel can't do that (color.mode: thresholds there paints the whole series one color from the latest value), so this uses Bar Chart.",
+      "type": "barchart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 60 },
           "color": { "mode": "thresholds" },
           "thresholds": { "mode": "absolute", "steps": [
             { "color": "#d03b3b", "value": null },
@@ -164,10 +162,13 @@
         },
         "overrides": []
       },
+      "options": {
+        "xTickLabelRotation": -45
+      },
       "targets": [
         {
           "refId": "A",
-          "format": "time_series",
+          "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT (day::timestamp AT TIME ZONE '$timezone') AS \"time\", value - median AS \"steps vs 30d median\"\nFROM health.daily_baseline WHERE metric = 'steps' AND $__timeFilter(day::timestamp) ORDER BY day"
         }
@@ -179,7 +180,7 @@
       "description": "AZM already applies Fitbit's own WHO-aligned weighting (Fat Burn ×1, Cardio/Peak ×2).",
       "type": "gauge",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
       "fieldConfig": {
         "defaults": {
           "unit": "none", "min": 0, "max": 150,
