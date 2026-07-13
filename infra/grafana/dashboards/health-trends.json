@@ -26,6 +26,7 @@
         "datasource": { "type": "postgres", "uid": "health-postgres" },
         "target": {
           "rawQuery": true,
+          "format": "table",
           "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 1"
         }
       },
@@ -36,6 +37,7 @@
         "datasource": { "type": "postgres", "uid": "health-postgres" },
         "target": {
           "rawQuery": true,
+          "format": "table",
           "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 2"
         }
       },
@@ -46,6 +48,7 @@
         "datasource": { "type": "postgres", "uid": "health-postgres" },
         "target": {
           "rawQuery": true,
+          "format": "table",
           "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 3"
         }
       },
@@ -56,6 +59,7 @@
         "datasource": { "type": "postgres", "uid": "health-postgres" },
         "target": {
           "rawQuery": true,
+          "format": "table",
           "rawSql": "SELECT time, timeend, device AS text FROM (SELECT device, min(hour) AS time, max(hour) AS timeend, row_number() OVER (ORDER BY min(hour)) AS rn FROM health.heart_rate_hourly WHERE device IS NOT NULL GROUP BY device) d WHERE rn = 4"
         }
       }
@@ -64,11 +68,11 @@
   "panels": [
     {
       "id": 1,
-      "title": "Heart rate — daily percentile band (p25–p75, 28d smoothed)",
-      "description": "Median line with p25–p75 band, computed from hourly percentile_agg() sketches rolled up to civil days in $timezone, then smoothed with a 28-day rolling average. Robust to sensor glitches: never raw min/max.",
+      "title": "Heart rate — sleep (p05–p95, 28d smoothed)",
+      "description": "Hours overlapping a sleep session only. Median line, inner p25–p75 band, outer p05–p95 band — all from hourly percentile_agg() sketches, never raw min/max. Splitting sleep from awake tightens each band: mixed together, the 24h band is wide enough (sleep ~50s/60s, awake spanning rest-to-exercise) to make the median look nearly flat at multi-year zoom.",
       "type": "timeseries",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -76,12 +80,30 @@
         },
         "overrides": [
           {
+            "matcher": { "id": "byName", "options": "p95_28d" },
+            "properties": [
+              { "id": "custom.fillBelowTo", "value": "p05_28d" },
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "custom.fillOpacity", "value": 12 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } },
+              { "id": "displayName", "value": "p95" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p05_28d" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } },
+              { "id": "displayName", "value": "p05" }
+            ]
+          },
+          {
             "matcher": { "id": "byName", "options": "p75_28d" },
             "properties": [
               { "id": "custom.fillBelowTo", "value": "p25_28d" },
               { "id": "custom.lineWidth", "value": 0 },
-              { "id": "custom.fillOpacity", "value": 20 },
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } },
+              { "id": "custom.fillOpacity", "value": 30 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } },
               { "id": "displayName", "value": "p75" }
             ]
           },
@@ -89,7 +111,7 @@
             "matcher": { "id": "byName", "options": "p25_28d" },
             "properties": [
               { "id": "custom.lineWidth", "value": 0 },
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } },
               { "id": "displayName", "value": "p25" }
             ]
           },
@@ -97,7 +119,7 @@
             "matcher": { "id": "byName", "options": "median_28d" },
             "properties": [
               { "id": "custom.lineWidth", "value": 2 },
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } },
               { "id": "displayName", "value": "median" }
             ]
           }
@@ -108,7 +130,75 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "WITH daily AS (\n  SELECT\n    (hour AT TIME ZONE '$timezone')::date AS day,\n    approx_percentile(0.25, rollup(bpm_agg)) AS p25,\n    approx_percentile(0.5,  rollup(bpm_agg)) AS median,\n    approx_percentile(0.75, rollup(bpm_agg)) AS p75,\n    sum(samples) AS samples\n  FROM health.heart_rate_hourly\n  WHERE $__timeFilter(hour)\n  GROUP BY 1\n  HAVING sum(samples) >= 30\n)\nSELECT\n  (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n  avg(p25)    OVER w AS p25_28d,\n  avg(median) OVER w AS median_28d,\n  avg(p75)    OVER w AS p75_28d\nFROM daily\nWINDOW w AS (ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW)\nORDER BY day"
+          "rawSql": "WITH sleep_hours AS (\n  SELECT DISTINCT date_trunc('hour', gs) AS hour\n  FROM health.sleep_session ss,\n       LATERAL generate_series(ss.start_time, ss.end_time, INTERVAL '1 hour') AS gs\n),\ndaily AS (\n  SELECT\n    (hh.hour AT TIME ZONE '$timezone')::date AS day,\n    approx_percentile(0.05, rollup(hh.bpm_agg)) AS p05,\n    approx_percentile(0.25, rollup(hh.bpm_agg)) AS p25,\n    approx_percentile(0.5,  rollup(hh.bpm_agg)) AS median,\n    approx_percentile(0.75, rollup(hh.bpm_agg)) AS p75,\n    approx_percentile(0.95, rollup(hh.bpm_agg)) AS p95,\n    sum(hh.samples) AS samples\n  FROM health.heart_rate_hourly hh\n  JOIN sleep_hours sh ON sh.hour = hh.hour\n  WHERE $__timeFilter(hh.hour)\n  GROUP BY 1\n  HAVING sum(hh.samples) >= 15\n)\nSELECT\n  (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n  avg(p05)    OVER w AS p05_28d,\n  avg(p25)    OVER w AS p25_28d,\n  avg(median) OVER w AS median_28d,\n  avg(p75)    OVER w AS p75_28d,\n  avg(p95)    OVER w AS p95_28d\nFROM daily\nWINDOW w AS (ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW)\nORDER BY day"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Heart rate — awake (p05–p95, 28d smoothed)",
+      "description": "Hours not overlapping any sleep session. Same construction as the sleep panel; compare the two rather than reading one wide mixed band.",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "p95_28d" },
+            "properties": [
+              { "id": "custom.fillBelowTo", "value": "p05_28d" },
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "custom.fillOpacity", "value": 12 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } },
+              { "id": "displayName", "value": "p95" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p05_28d" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } },
+              { "id": "displayName", "value": "p05" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p75_28d" },
+            "properties": [
+              { "id": "custom.fillBelowTo", "value": "p25_28d" },
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "custom.fillOpacity", "value": 30 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } },
+              { "id": "displayName", "value": "p75" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p25_28d" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } },
+              { "id": "displayName", "value": "p25" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "median_28d" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 2 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } },
+              { "id": "displayName", "value": "median" }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH sleep_hours AS (\n  SELECT DISTINCT date_trunc('hour', gs) AS hour\n  FROM health.sleep_session ss,\n       LATERAL generate_series(ss.start_time, ss.end_time, INTERVAL '1 hour') AS gs\n),\ndaily AS (\n  SELECT\n    (hh.hour AT TIME ZONE '$timezone')::date AS day,\n    approx_percentile(0.05, rollup(hh.bpm_agg)) AS p05,\n    approx_percentile(0.25, rollup(hh.bpm_agg)) AS p25,\n    approx_percentile(0.5,  rollup(hh.bpm_agg)) AS median,\n    approx_percentile(0.75, rollup(hh.bpm_agg)) AS p75,\n    approx_percentile(0.95, rollup(hh.bpm_agg)) AS p95,\n    sum(hh.samples) AS samples\n  FROM health.heart_rate_hourly hh\n  LEFT JOIN sleep_hours sh ON sh.hour = hh.hour\n  WHERE $__timeFilter(hh.hour) AND sh.hour IS NULL\n  GROUP BY 1\n  HAVING sum(hh.samples) >= 15\n)\nSELECT\n  (day::timestamp AT TIME ZONE '$timezone') AS \"time\",\n  avg(p05)    OVER w AS p05_28d,\n  avg(p25)    OVER w AS p25_28d,\n  avg(median) OVER w AS median_28d,\n  avg(p75)    OVER w AS p75_28d,\n  avg(p95)    OVER w AS p95_28d\nFROM daily\nWINDOW w AS (ORDER BY day ROWS BETWEEN 27 PRECEDING AND CURRENT ROW)\nORDER BY day"
         }
       ]
     },
@@ -258,59 +348,12 @@
       ]
     },
     {
-      "id": 8,
-      "title": "Year-over-year — daily steps by day-of-year",
-      "description": "Each point is one calendar day; x is day-of-year so every year overlays on a common axis, colored by year. A scatter (not connected lines) to keep a decade of overlapping series legible.",
-      "type": "xychart",
-      "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 33 },
-      "fieldConfig": {
-        "defaults": { "custom": { "pointSize": { "fixed": 4 } } },
-        "overrides": []
-      },
-      "options": {
-        "series": [
-          { "x": "day_of_year", "y": "steps", "pointColor": { "field": "year" } }
-        ]
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  extract(doy from day)::int AS day_of_year,\n  extract(year from day)::text AS year,\n  steps\nFROM health.steps_daily\nWHERE $__timeFilter(day::timestamp)\nORDER BY 1"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "title": "Seasonality — average daily steps by month",
-      "type": "barchart",
-      "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 42 },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT to_char(day, 'Mon') AS month, avg(steps) AS \"avg steps\"\nFROM health.steps_daily\nWHERE $__timeFilter(day::timestamp)\nGROUP BY to_char(day, 'Mon'), extract(month from day)\nORDER BY extract(month from day)"
-        }
-      ]
-    },
-    {
       "id": 10,
       "title": "Correlation: 28d avg steps → weigh-in weight",
       "description": "X = trailing 28-day average daily steps ending the day before each weigh-in. Y = weight. Correlation, not causation; color = year.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 33 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 5 } } },
         "overrides": []
@@ -335,7 +378,7 @@
       "description": "X = previous civil day's step total. Y = that night's Fitbit sleep score. Correlation, not causation; color = year.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 33 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 5 } } },
         "overrides": []
@@ -360,7 +403,7 @@
       "description": "X = trailing 28-day average daily steps ending the day before. Y = that day's resting heart rate. Correlation, not causation; color = year.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 33 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 5 } } },
         "overrides": []
