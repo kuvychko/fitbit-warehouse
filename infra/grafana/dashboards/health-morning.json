@@ -5,7 +5,7 @@
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "",
-  "time": { "from": "now-24h", "to": "now" },
+  "time": { "from": "now-48h", "to": "now" },
   "templating": {
     "list": [
       {
@@ -29,6 +29,9 @@
         "defaults": { "unit": "dateTimeFromNow", "color": { "mode": "fixed", "fixedColor": "#898781" } },
         "overrides": []
       },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false }
+      },
       "targets": [
         {
           "refId": "A",
@@ -45,16 +48,24 @@
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 7, "w": 24, "x": 0, "y": 4 },
       "fieldConfig": {
-        "defaults": { "unit": "none" },
-        "overrides": [
-          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "deep" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } }] },
-          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "light" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }] },
-          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "rem" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } }] },
-          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "wake" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eda100" } }] },
-          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "asleep" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }] },
-          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "restless" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eda100" } }] },
-          { "matcher": { "id": "byValue", "options": { "prop": "level", "value": "awake" } }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#e34948" } }] }
-        ]
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "deep":     { "text": "deep",     "color": "#4a3aa7", "index": 0 },
+                "light":    { "text": "light",    "color": "#2a78d6", "index": 1 },
+                "rem":      { "text": "rem",      "color": "#1baf7a", "index": 2 },
+                "wake":     { "text": "wake",     "color": "#eda100", "index": 3 },
+                "asleep":   { "text": "asleep",   "color": "#2a78d6", "index": 4 },
+                "restless": { "text": "restless", "color": "#eda100", "index": 5 },
+                "awake":    { "text": "awake",    "color": "#e34948", "index": 6 }
+              }
+            }
+          ]
+        },
+        "overrides": []
       },
       "targets": [
         {
