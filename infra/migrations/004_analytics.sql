@@ -167,19 +167,23 @@ FROM health.sleep_score sc
 JOIN health.sleep_session ss ON ss.log_id = sc.sleep_log_id
 WHERE sc.overall IS NOT NULL
 UNION ALL
+-- breathing_rate.sleep_end is rounded coarser than sleep_session.end_time
+-- (observed offsets up to a few minutes, never exact), so the exact-equality
+-- join below only matches ~4% of rows; the other 96% fall through to the UTC
+-- date cast. That sounds worse than it is: every sample checked against
+-- production had the UTC-cast day agree with sleep_session's Fitbit-civil
+-- day anyway (sleep_end isn't near a UTC midnight boundary for any
+-- timezone/schedule combination observed). A closest-match window join was
+-- tried instead and reliably attributed the correct day, but LEFT JOIN
+-- LATERAL here made health.daily_baseline's own correlated 30-day lookup
+-- (itself already O(rows x window) against this view) blow up to a
+-- multi-hundred-million-cost plan and time out in production. Reverted:
+-- correctness here is a paper win over the existing fallback, and not worth
+-- another expensive join re-evaluated inside an already-correlated view.
 SELECT COALESCE(ss.day, (br.sleep_end AT TIME ZONE 'UTC')::date),
        'breathing_rate', br.full_bpm::double precision
 FROM health.breathing_rate br
-LEFT JOIN LATERAL (
-    -- breathing_rate.sleep_end is rounded coarser than sleep_session.end_time
-    -- (observed offsets up to a few minutes, never exact) — a window join
-    -- picking the closest session recovers the correct Fitbit-civil day;
-    -- exact equality only matched ~4% of real rows.
-    SELECT day FROM health.sleep_session
-    WHERE end_time BETWEEN br.sleep_end - INTERVAL '3 hours' AND br.sleep_end + INTERVAL '3 hours'
-    ORDER BY abs(extract(epoch FROM end_time - br.sleep_end))
-    LIMIT 1
-) ss ON true
+LEFT JOIN health.sleep_session ss ON ss.end_time = br.sleep_end
 WHERE br.full_bpm IS NOT NULL
 UNION ALL
 SELECT COALESCE(ss.day, (nt.sleep_start AT TIME ZONE 'UTC')::date),
