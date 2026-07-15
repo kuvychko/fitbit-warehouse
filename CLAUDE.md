@@ -102,11 +102,15 @@ printing the dump at all.
   against the timestamptz column) uses the *session's* timezone, not
   `$timezone` — silently shifting every civil-day boundary by the UTC
   offset. Re-localize explicitly instead:
-  `(date_expr::timestamp AT TIME ZONE '$timezone')`. Found in
-  `health-morning.json` (fixed); the same pattern is still present in
-  `health-trends.json` and `health-scoreboard.json` as of this writing —
-  check before trusting a "yesterday"/"today" boundary in any dashboard
-  panel that wasn't already fixed.
+  `(date_expr::timestamp AT TIME ZONE '$timezone')`. Found and fixed in
+  `health-morning.json` and `health-scoreboard.json` (the WHO AZM panel).
+  `health-trends.json` looked similar at a glance but turned out clean on
+  closer inspection — it filters via Grafana's `$__timeFilter()` macro
+  instead of manual date arithmetic, and already uses the correct
+  `(day::timestamp AT TIME ZONE '$timezone')` idiom for output. Don't
+  assume a match on the surface pattern is actually a bug — check whether
+  the expression is being used for a *comparison* (where the cast
+  direction matters) or just *output conversion* (where it doesn't).
 - **`infra/migrations/001_bootstrap.sql`'s `ALTER ROLE ... PASSWORD`
   lines run unconditionally on every `migrate` invocation** — unlike the
   `CREATE ROLE` guard above them, they are *not* skipped when the role
