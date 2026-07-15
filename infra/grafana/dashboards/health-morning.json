@@ -82,7 +82,7 @@
       "description": "The actual clock-time reference for the hour-offset X axes on the sleep/HR panels: hour 0 on \"Last night's sleep\" and \"Yesterday's heart rate\" is this bedtime; hour 0 on \"Today's heart rate\" is this wake time.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 10 },
+      "gridPos": { "h": 3, "w": 18, "x": 0, "y": 10 },
       "fieldConfig": { "defaults": { "unit": "dateTimeAsLocal", "color": { "mode": "fixed", "fixedColor": "#898781" } }, "overrides": [] },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false },
@@ -99,6 +99,17 @@
           "rawSql": "SELECT start_time AS \"bedtime\", end_time AS \"wake time\"\nFROM health.primary_sleep_session ORDER BY day DESC LIMIT 1"
         }
       ]
+    },
+    {
+      "id": 17,
+      "title": "Sleep stage colors",
+      "description": "xychart's built-in legend is series-level (would just show \"bpm\"), not per-point-category - it can't explain what each color on the hypnogram trace means, so this is a plain text swatch key instead.",
+      "type": "text",
+      "gridPos": { "h": 3, "w": 6, "x": 18, "y": 10 },
+      "options": {
+        "mode": "markdown",
+        "content": "- 🟣 Deep\n- 🔵 Light\n- 🟢 REM\n- 🟠 Wake"
+      }
     },
     {
       "id": 3,
