@@ -145,3 +145,22 @@ printing the dump at all.
   source in the running container
   (`docker exec grafana find /usr/share/grafana/public/app/plugins/panel/<type>
   -name '*.gen.ts'`) rather than keep guessing at the schema from prior art.
+  Two more traps in the *current* (matcher-based) shape specifically,
+  found by reading `xychart/utils.ts`'s `prepSeries()`:
+  - **`"mapping": "manual"` requires `frame`, `x`, AND `y` matchers on
+    every series entry**, not just `x`/`y` — if `frame.matcher` is
+    missing, the series is silently dropped (0 series), which hits an
+    unhandled path in the plugin (`utils.ts` has a literal
+    `// TODO: could not create series, skip & show error?` at that
+    branch) and surfaces as a hard "Err" on the panel, not a graceful
+    fallback. Always include
+    `"frame": {"matcher": {"id": "byIndex", "options": 0}}` (frame 0 is
+    correct for any panel with exactly one query/target).
+  - **The `color`/`size` series dimensions only ever match numeric
+    fields** (`onlyNumFields.find(...)` in the same function) — a text
+    field can never work as a per-point color dimension, full stop, no
+    matter how the matcher is written. Encode the category as an integer
+    column instead (e.g. one `CASE metric WHEN ... THEN 0 ...` in the
+    SQL) and drive the actual colors via a `fieldConfig.overrides` entry
+    on that field with `color: {mode: "thresholds"}` and one threshold
+    step per category value.
