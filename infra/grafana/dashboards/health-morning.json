@@ -44,17 +44,27 @@
     {
       "id": 2,
       "title": "Last night's sleep",
-      "description": "Heart rate over last night's main sleep session (± 10min padding). X axis is hours since sleep onset (see the \"Sleep timing\" panel below for the actual clock time this references) rather than wall-clock time, so this panel is locked to the actual sleep episode and can't drift depending on when during the day it's viewed (design.md D15). Reverted to the last confirmed-rendering xychart config (commit 0193cbf) plus one surgical field-level change (connected lines) after two schema rewrites both produced a hard \"Err\" for reasons not fully pinned down - see design.md D15 addendum. Per-point stage coloring is parked, not abandoned.",
+      "description": "Heart rate over last night's main sleep session (± 10min padding), colored per-point by sleep stage. X axis is hours since sleep onset (see the \"Sleep timing\" panel below for the actual clock time this references) rather than wall-clock time, so this panel is locked to the actual sleep episode and can't drift depending on when during the day it's viewed (design.md D15). Stage coloring is numeric (stage_code 0-3) with a thresholds override, not a text field directly - xychart's color matching only ever considers numeric fields (confirmed in the plugin's own source), so a text stage column is silently ignored no matter how it's referenced.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 4 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 6 }, "show": "points+lines" } },
-        "overrides": []
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "stage_code" }, "properties": [
+            { "id": "color", "value": { "mode": "thresholds" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "#4a3aa7", "value": null },
+              { "color": "#2a78d6", "value": 0.5 },
+              { "color": "#1baf7a", "value": 1.5 },
+              { "color": "#eda100", "value": 2.5 }
+            ] } }
+          ] }
+        ]
       },
       "options": {
         "series": [
-          { "x": "hours_since_onset", "y": "bpm", "pointColor": { "field": "stage" } }
+          { "x": "hours_since_onset", "y": "bpm", "pointColor": { "field": "stage_code" } }
         ]
       },
       "targets": [
@@ -62,7 +72,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1),\nhr AS (\n  SELECT time_bucket('2 minutes', h.time) AS t, avg(h.bpm) AS bpm\n  FROM health.heart_rate h, ps\n  WHERE h.time >= ps.start_time - interval '10 minutes' AND h.time < ps.end_time + interval '10 minutes'\n  GROUP BY 1\n)\nSELECT\n  EXTRACT(EPOCH FROM (hr.t - ps.start_time)) / 3600.0 AS hours_since_onset,\n  hr.bpm,\n  COALESCE(\n    (SELECT stg.level FROM health.sleep_stage stg\n     WHERE stg.time <= hr.t AND stg.time + (stg.seconds || ' seconds')::interval > hr.t AND NOT stg.is_short\n     ORDER BY stg.time DESC LIMIT 1),\n    'awake'\n  ) AS stage\nFROM hr, ps\nORDER BY 1"
+          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1),\nhr AS (\n  SELECT time_bucket('2 minutes', h.time) AS t, avg(h.bpm) AS bpm\n  FROM health.heart_rate h, ps\n  WHERE h.time >= ps.start_time - interval '10 minutes' AND h.time < ps.end_time + interval '10 minutes'\n  GROUP BY 1\n)\nSELECT\n  EXTRACT(EPOCH FROM (hr.t - ps.start_time)) / 3600.0 AS hours_since_onset,\n  hr.bpm,\n  COALESCE(\n    (SELECT CASE stg.level WHEN 'deep' THEN 0 WHEN 'light' THEN 1 WHEN 'rem' THEN 2 WHEN 'wake' THEN 3 ELSE 3 END\n     FROM health.sleep_stage stg\n     WHERE stg.time <= hr.t AND stg.time + (stg.seconds || ' seconds')::interval > hr.t AND NOT stg.is_short\n     ORDER BY stg.time DESC LIMIT 1),\n    3\n  ) AS stage_code\nFROM hr, ps\nORDER BY 1"
         }
       ]
     },
