@@ -44,17 +44,22 @@
     {
       "id": 2,
       "title": "Last night's sleep",
-      "description": "Heart rate over last night's main sleep session (± 10min padding), colored per-point by sleep stage. X axis is hours since sleep onset (primary_sleep_session.start_time) rather than wall-clock time, so this panel is locked to the actual sleep episode and can't drift depending on when during the day it's viewed (design.md D13 - Grafana can't set a panel's time range from a query result, and a relative now-Xh override was tried and rejected for exactly that drift). Stage coloring is per-point (xychart pointColor), not background bands - Grafana's native region-annotation overlay only works on a time-domain axis, incompatible with this numeric one.",
+      "description": "Heart rate over last night's main sleep session (± 10min padding), colored per-point by sleep stage. X axis is hours since sleep onset (see the \"Sleep timing\" panel below for the actual clock time this references) rather than wall-clock time, so this panel is locked to the actual sleep episode and can't drift depending on when during the day it's viewed (design.md D15 - Grafana can't set a panel's time range from a query result, and every approach routed through its time-range machinery drifted for the same structural reason). Stage coloring is per-point, not background bands - Grafana's native region-annotation overlay only works on a time-domain axis, incompatible with this numeric one.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 4 },
       "fieldConfig": {
-        "defaults": { "custom": { "pointSize": { "fixed": 6 } } },
+        "defaults": { "custom": { "pointSize": { "fixed": 6 }, "show": "points+lines", "lineWidth": 1 } },
         "overrides": []
       },
       "options": {
+        "mapping": "manual",
         "series": [
-          { "x": "hours_since_onset", "y": "bpm", "pointColor": { "field": "stage" } }
+          {
+            "x": { "matcher": { "id": "byName", "options": "hours_since_onset" } },
+            "y": { "matcher": { "id": "byName", "options": "bpm" } },
+            "color": { "matcher": { "id": "byName", "options": "stage" } }
+          }
         ]
       },
       "targets": [
@@ -63,6 +68,27 @@
           "format": "table",
           "rawQuery": true,
           "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1),\nhr AS (\n  SELECT time_bucket('2 minutes', h.time) AS t, avg(h.bpm) AS bpm\n  FROM health.heart_rate h, ps\n  WHERE h.time >= ps.start_time - interval '10 minutes' AND h.time < ps.end_time + interval '10 minutes'\n  GROUP BY 1\n)\nSELECT\n  EXTRACT(EPOCH FROM (hr.t - ps.start_time)) / 3600.0 AS hours_since_onset,\n  hr.bpm,\n  COALESCE(\n    (SELECT stg.level FROM health.sleep_stage stg\n     WHERE stg.time <= hr.t AND stg.time + (stg.seconds || ' seconds')::interval > hr.t AND NOT stg.is_short\n     ORDER BY stg.time DESC LIMIT 1),\n    'awake'\n  ) AS stage\nFROM hr, ps\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Sleep timing",
+      "description": "The actual clock-time reference for the hour-offset X axes on the sleep/HR panels: hour 0 on \"Last night's sleep\" and \"Yesterday's heart rate\" is this bedtime; hour 0 on \"Today's heart rate\" is this wake time.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 11 },
+      "fieldConfig": { "defaults": { "unit": "dateTimeAsLocal", "color": { "mode": "fixed", "fixedColor": "#898781" } }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false },
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT start_time AS \"bedtime\", end_time AS \"wake time\"\nFROM health.primary_sleep_session ORDER BY day DESC LIMIT 1"
         }
       ]
     },
@@ -239,12 +265,16 @@
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 8, "w": 16, "x": 0, "y": 25 },
       "fieldConfig": {
-        "defaults": { "custom": { "pointSize": { "fixed": 4 } }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
+        "defaults": { "custom": { "pointSize": { "fixed": 4 }, "show": "points+lines", "lineWidth": 1 }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
         "overrides": []
       },
       "options": {
+        "mapping": "manual",
         "series": [
-          { "x": "hours_before_bedtime", "y": "bpm" }
+          {
+            "x": { "matcher": { "id": "byName", "options": "hours_before_bedtime" } },
+            "y": { "matcher": { "id": "byName", "options": "bpm" } }
+          }
         ]
       },
       "targets": [
@@ -281,12 +311,16 @@
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 8, "w": 16, "x": 0, "y": 33 },
       "fieldConfig": {
-        "defaults": { "custom": { "pointSize": { "fixed": 4 } }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
+        "defaults": { "custom": { "pointSize": { "fixed": 4 }, "show": "points+lines", "lineWidth": 1 }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
         "overrides": []
       },
       "options": {
+        "mapping": "manual",
         "series": [
-          { "x": "hours_since_wake", "y": "bpm" }
+          {
+            "x": { "matcher": { "id": "byName", "options": "hours_since_wake" } },
+            "y": { "matcher": { "id": "byName", "options": "bpm" } }
+          }
         ]
       },
       "targets": [
