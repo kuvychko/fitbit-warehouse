@@ -47,7 +47,7 @@
       "description": "Heart rate over last night's main sleep session (± 10min padding), colored per-point by sleep stage. X axis is hours since sleep onset (see the \"Sleep timing\" panel below for the actual clock time this references) rather than wall-clock time, so this panel is locked to the actual sleep episode and can't drift depending on when during the day it's viewed (design.md D15 - Grafana can't set a panel's time range from a query result, and every approach routed through its time-range machinery drifted for the same structural reason). Stage coloring is per-point, not background bands - Grafana's native region-annotation overlay only works on a time-domain axis, incompatible with this numeric one.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 4 },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 4 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 6 }, "show": "points+lines", "lineWidth": 1 } },
         "overrides": [
@@ -63,7 +63,7 @@
         ]
       },
       "options": {
-        "mapping": "manual",
+        "mapping": "auto",
         "series": [
           {
             "frame": { "matcher": { "id": "byIndex", "options": 0 } },
@@ -88,11 +88,14 @@
       "description": "The actual clock-time reference for the hour-offset X axes on the sleep/HR panels: hour 0 on \"Last night's sleep\" and \"Yesterday's heart rate\" is this bedtime; hour 0 on \"Today's heart rate\" is this wake time.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 11 },
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 10 },
       "fieldConfig": { "defaults": { "unit": "dateTimeAsLocal", "color": { "mode": "fixed", "fixedColor": "#898781" } }, "overrides": [] },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false },
-        "orientation": "horizontal"
+        "orientation": "horizontal",
+        "text": { "valueSize": 28, "titleSize": 16 },
+        "colorMode": "value",
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -280,7 +283,7 @@
         "overrides": []
       },
       "options": {
-        "mapping": "manual",
+        "mapping": "auto",
         "series": [
           {
             "frame": { "matcher": { "id": "byIndex", "options": 0 } },
@@ -327,7 +330,7 @@
         "overrides": []
       },
       "options": {
-        "mapping": "manual",
+        "mapping": "auto",
         "series": [
           {
             "frame": { "matcher": { "id": "byIndex", "options": 0 } },
