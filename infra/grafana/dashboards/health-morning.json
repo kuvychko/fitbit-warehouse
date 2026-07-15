@@ -149,25 +149,21 @@
     },
     {
       "id": 4,
-      "title": "Sleep duration & efficiency",
-      "description": "Efficiency is Takeout-only (map_sleep leaves it unset for API-synced sessions, same class of gap as main_sleep/log_id) — reads blank on sync-only nights rather than showing a fabricated estimate. A naive minutes_asleep/time_in_bed approximation was tried and rejected: it undershoots Fitbit's real figure by a consistent 5-6 points on backfilled nights where both are known, which would be actively misleading, not just approximate.",
+      "title": "Sleep duration",
+      "description": "Efficiency dropped from this card: it's Takeout-only (map_sleep leaves it unset for API-synced sessions, same class of gap as main_sleep/log_id), so it would read blank on every sync-only night. A naive minutes_asleep/time_in_bed approximation was tried and rejected: it undershoots Fitbit's real figure by a consistent 5-6 points on backfilled nights where both are known, which would be actively misleading, not just approximate.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 13 },
       "fieldConfig": {
         "defaults": { "unit": "none" },
-        "overrides": [
-          { "matcher": { "id": "byName", "options": "efficiency %" }, "properties": [
-            { "id": "noValue", "value": "n/a (Takeout-only)" }
-          ] }
-        ]
+        "overrides": []
       },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT round(minutes_asleep / 60.0, 1) AS \"hours asleep\", efficiency AS \"efficiency %\"\nFROM health.primary_sleep_session ORDER BY day DESC LIMIT 1"
+          "rawSql": "SELECT round(minutes_asleep / 60.0, 1) AS \"hours asleep\"\nFROM health.primary_sleep_session ORDER BY day DESC LIMIT 1"
         }
       ]
     },
@@ -311,7 +307,7 @@
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT time_bucket('5 minutes', time) AS \"time\", avg(bpm) AS bpm\nFROM health.heart_rate\nWHERE time >= ((now() AT TIME ZONE '$timezone')::date - 1) AND time < (now() AT TIME ZONE '$timezone')::date\nGROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT time_bucket('5 minutes', time) AS \"time\", avg(bpm) AS bpm\nFROM health.heart_rate\nWHERE time >= (((now() AT TIME ZONE '$timezone')::date - 1)::timestamp AT TIME ZONE '$timezone')\n  AND time <  ((now() AT TIME ZONE '$timezone')::date::timestamp AT TIME ZONE '$timezone')\nGROUP BY 1 ORDER BY 1"
         }
       ]
     },
@@ -327,7 +323,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  (SELECT steps FROM health.steps_daily WHERE day = (now() AT TIME ZONE '$timezone')::date - 1) AS \"steps\",\n  (SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2 + sum(minutes) FILTER (WHERE zone = 'FAT_BURN')\n     FROM health.azm_hourly\n     WHERE hour >= (now() AT TIME ZONE '$timezone')::date - 1 AND hour < (now() AT TIME ZONE '$timezone')::date) AS \"AZM\""
+          "rawSql": "SELECT\n  (SELECT steps FROM health.steps_daily WHERE day = (now() AT TIME ZONE '$timezone')::date - 1) AS \"steps\",\n  (SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2 + sum(minutes) FILTER (WHERE zone = 'FAT_BURN')\n     FROM health.azm_hourly\n     WHERE hour >= (((now() AT TIME ZONE '$timezone')::date - 1)::timestamp AT TIME ZONE '$timezone')\n       AND hour <  ((now() AT TIME ZONE '$timezone')::date::timestamp AT TIME ZONE '$timezone')) AS \"AZM\""
         }
       ]
     },
@@ -344,7 +340,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  (SELECT sum(steps) FROM health.steps_hourly WHERE hour >= (now() AT TIME ZONE '$timezone')::date) AS \"steps today\",\n  (SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2 + sum(minutes) FILTER (WHERE zone = 'FAT_BURN')\n     FROM health.azm_hourly\n     WHERE hour >= (now() AT TIME ZONE '$timezone')::date) AS \"AZM today\""
+          "rawSql": "SELECT\n  (SELECT sum(steps) FROM health.steps_hourly WHERE hour >= ((now() AT TIME ZONE '$timezone')::date::timestamp AT TIME ZONE '$timezone')) AS \"steps today\",\n  (SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2 + sum(minutes) FILTER (WHERE zone = 'FAT_BURN')\n     FROM health.azm_hourly\n     WHERE hour >= ((now() AT TIME ZONE '$timezone')::date::timestamp AT TIME ZONE '$timezone')) AS \"AZM today\""
         }
       ]
     },
@@ -360,7 +356,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT weight_kg AS \"weight (kg)\"\nFROM health.weight\nWHERE time >= (now() AT TIME ZONE '$timezone')::date\nORDER BY time DESC LIMIT 1"
+          "rawSql": "SELECT weight_kg AS \"weight (kg)\"\nFROM health.weight\nWHERE time >= ((now() AT TIME ZONE '$timezone')::date::timestamp AT TIME ZONE '$timezone')\nORDER BY time DESC LIMIT 1"
         }
       ]
     }
