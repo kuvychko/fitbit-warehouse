@@ -57,3 +57,69 @@ In the author's homelab this repo is a *tenant* of a shared TimescaleDB cluster
 - Dev context is Windows (PowerShell primary, Bash available); deploy target is
   Linux (Raspberry Pi). Keep scripts portable; `.gitattributes` forces LF for
   `*.sh` / `*.sql`.
+
+## Handling secrets in a session (learned from a real incident, 2026-07)
+
+A production credential-rotation session leaked real values into the
+conversation transcript twice, both from the same root mistake: building an
+ad-hoc keyword-filtered redaction (`grep -v -iE "PASSWORD|SECRET"` and
+similar) before printing a config dump, then having a *different* secret
+slip through because its name didn't match the filter (`HEALTH_RO_PW` isn't
+caught by a pattern for `PASSWORD`; a `docker compose config` dump redacted
+for one variable name printed several others in full, including another
+project's credential). The filter is never the fix — the fix is not
+printing the dump at all.
+
+- **Never display a file or command output that *might* contain secrets,
+  "redacted" or not.** If you need to check a value, check the *fact* you
+  actually need instead: does the key exist (`grep -c '^KEY='`), does it
+  match a known-good value (hash both sides — `md5sum`/`sha256sum` — and
+  compare hashes, never print either value), does authentication succeed
+  (a real connection test, which also verifies more than a static compare).
+- This applies to `.env` files, `docker compose config` (resolves and
+  prints every interpolated value, including ones you weren't asking
+  about), `env | grep`, shell history, and any tool's "here's what I'm
+  about to do" dry-run output that echoes resolved secrets.
+- Generating a new password on Windows/Git-Bash: verify it's clean before
+  use (`od -c file | tail -2`, checking for a stray trailing `\r`).
+  `tr -d '/+=\n'` does not reliably strip a trailing newline in every
+  Windows shell environment, and a stray `\r` is interpreted
+  *inconsistently* across tools (bash `$(cat file)` strips trailing `\n`
+  only; Docker Compose's own `.env` parser strips `\r` too) — the same
+  byte sequence can authenticate in one code path and fail in another,
+  which is a much more confusing failure than a bad password would be.
+- Never move a secret to a new host "just in case" or as a side effect of
+  debugging something else. Each transfer is a new place it can leak or be
+  forgotten — move only what's needed, delete it immediately after use,
+  and if a plan requires touching a credential nobody asked about, stop
+  and say so before doing it.
+
+## Known correctness pitfalls in this codebase
+
+- **`timestamptz` column compared against a bare `(now() AT TIME ZONE
+  '$timezone')::date`**: the `::date` cast throws away the timezone
+  context, so the later implicit date→timestamptz cast (needed to compare
+  against the timestamptz column) uses the *session's* timezone, not
+  `$timezone` — silently shifting every civil-day boundary by the UTC
+  offset. Re-localize explicitly instead:
+  `(date_expr::timestamp AT TIME ZONE '$timezone')`. Found in
+  `health-morning.json` (fixed); the same pattern is still present in
+  `health-trends.json` and `health-scoreboard.json` as of this writing —
+  check before trusting a "yesterday"/"today" boundary in any dashboard
+  panel that wasn't already fixed.
+- **`infra/migrations/001_bootstrap.sql`'s `ALTER ROLE ... PASSWORD`
+  lines run unconditionally on every `migrate` invocation** — unlike the
+  `CREATE ROLE` guard above them, they are *not* skipped when the role
+  already exists. Running `migrate` (or replaying `001_bootstrap.sql`
+  directly) always resets `health_owner`/`health_rw`/`health_ro` to
+  whatever values it's given. Rotating credentials outside of a full
+  `migrate` run means the *next* `migrate` run needs the exact current
+  values passed in, or it will silently roll the rotation back.
+- **Docker Compose's `.env` resolution is tied to the compose file's
+  directory** (the "project directory"), not the shell's current working
+  directory — `docker compose -f infra/docker-compose.yml up ...` run
+  from the repo root will *not* find a `.env` that lives at the repo root
+  if the compose file's own directory (`infra/`) has none. Symptom looks
+  like a missing/empty env var, not a path error. Use an explicit
+  `--env-file <path>` when the compose file and `.env` aren't in the same
+  directory.
