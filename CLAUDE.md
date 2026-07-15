@@ -127,3 +127,21 @@ printing the dump at all.
   like a missing/empty env var, not a path error. Use an explicit
   `--env-file <path>` when the compose file and `.env` aren't in the same
   directory.
+- **Grafana `xychart` panel options schema is version-sensitive, and
+  copying a working panel from elsewhere in this repo is not verification.**
+  Two option shapes exist: an old one (`"x": "fieldname"`, `"pointColor":
+  {"field": "fieldname"}`) and a current one (`"mapping": "manual"`,
+  `"x": {"matcher": {"id": "byName", "options": "fieldname"}}`, same for
+  `y`/`color`/`size`). A migration handler can upgrade old→new
+  automatically, but only when `panel.pluginVersion` is unset or `< 11.1`
+  — don't rely on it firing. Symptom of using the wrong shape: the panel
+  renders (no error) with default behavior — single color, points only,
+  no line — silently ignoring your field mappings rather than failing
+  loudly. `health-trends.json`'s correlation-row xychart panels use the
+  old shape and were never visually confirmed to render correctly either;
+  don't treat "it's already in the codebase" as proof a Grafana panel
+  config actually works. When a panel's visual behavior doesn't match its
+  JSON config and there's no error to chase, check the plugin's own
+  source in the running container
+  (`docker exec grafana find /usr/share/grafana/public/app/plugins/panel/<type>
+  -name '*.gen.ts'`) rather than keep guessing at the schema from prior art.

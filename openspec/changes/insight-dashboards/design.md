@@ -172,7 +172,17 @@ silently freeze. Breathing rate/temp recovery tiles are unaffected by this
 change (out of this amendment's scope) but will silently go stale the same
 way `main_sleep` did; worth its own follow-up, not fixed here.
 
-### D12. Hypnogram merged with nighttime HR via per-stage region annotations
+### D12/D13 superseded — see D15
+The relative time override chosen in D13 (`now-14h` to `now-1h`) turned out
+to drift exactly as predicted ("won't always perfectly frame an unusual
+night" undersold it — it drifted on *ordinary* nights too, depending purely
+on what time of day the dashboard was viewed). The same relative-window
+approach on "Yesterday's heart rate" (D-14-adjacent, not its own lettered
+decision at the time) had the identical problem. D15 replaces both. Kept
+below for the historical record of what was tried and why it didn't hold up
+in practice, not as the current design.
+
+### D12 (historical). Hypnogram merged with nighttime HR via per-stage region annotations
 Grafana natively renders annotation queries (`time`, `timeEnd`, `tags`) as
 colored background regions on a timeseries panel — no custom plugin needed.
 One annotation query per sleep stage (`WHERE level = 'deep'/'light'/'rem'/
@@ -184,7 +194,7 @@ the HR timeseries with matched x-axis to fake a merge — visually close but
 still two panels with two independent legends/tooltips; true annotation
 regions are a real overlay in one panel.
 
-### D13. No true auto-zoom — a fixed, generous relative window instead
+### D13 (historical). No true auto-zoom — a fixed, generous relative window instead
 Spiked live against the running Grafana 11.4 instance: saving a dashboard
 with `time.from`/`time.to` set to `${variable}` strings is accepted without
 validation (no special-casing), and Grafana's time range is resolved via
@@ -239,6 +249,93 @@ for it, just last night's avg/min shown directly. The readiness composite
 components, not four. A materialized/cagg-backed SpO2 daily summary could
 revisit this later, but that's real new scope, not a fit for this
 amendment.
+
+### D15. Sleep/HR panels anchored to `primary_sleep_session`, not to Grafana's time axis at all
+**Amended 2026-07-15**, after D13's relative-window compromise turned out
+to drift in practice, not just in edge cases — both the hypnogram panel
+and "Yesterday's heart rate" (relying on the dashboard's default `now-48h`
+to `now`) rendered a different, sometimes-wrong slice of data depending
+purely on what time of day the report was viewed. Root cause was always
+architectural: these panels' real anchor is a *fixed event* (bedtime/wake
+time), but every fix attempted so far (variable-interpolated time range,
+a relative `timeFrom`/`timeShift` override, a wider dashboard-default
+window) still routed through Grafana's "now"-relative time-range
+machinery, which structurally cannot express "locked to an absolute event
+already in the past" — only "N hours before whenever this happens to be
+evaluated."
+
+Resolved by removing Grafana's time axis from the picture entirely for
+these three panels. Each becomes an `xychart` panel with a *numeric* X
+axis computed directly in SQL as hours relative to `primary_sleep_session`
+(source-agnostic "main sleep," per D10 — naps are structurally excluded
+already, satisfying "auto-detect the major sleep chunk, ignore naps" with
+no new logic):
+- **"Last night's sleep"**: X = hours since `start_time` (small negative
+  padding before, positive through wake). Never drifts — it isn't
+  expressed relative to "now" at any point, only relative to the sleep
+  session's own start, which is a fixed instant once that session exists.
+- **"Yesterday's heart rate"**: X = hours before `start_time`, spanning
+  the 24h leading up to bedtime — a "day before sleep" framing, not a UTC/
+  civil-day "yesterday". Same drift-immunity.
+- **New "Today's heart rate"**: X = hours since `end_time` (wake time), no
+  upper bound — naturally grows through the day as new samples sync in,
+  stacked directly under "Yesterday's" for day-over-day comparison (the
+  live-updating counterpart the author asked for alongside this fix).
+- **New "Sleep timing" stat panel**: a plain readout of `start_time`/
+  `end_time`, added because an hour-offset X axis is meaningless without
+  stating what hour 0 actually is in wall-clock terms — a numeric axis
+  trades away Grafana's usual free wall-clock labeling, so something has
+  to supply that context back.
+
+**Cost paid**: D12's colored background bands (native Grafana region
+annotations) are gone — `xychart` panels have no time-domain axis for
+annotations to attach to, so that whole mechanism is moot, not just
+inconvenient. Stage coloring on the sleep panel is per-point instead, each
+2-minute HR sample tagged with whichever `sleep_stage` segment contains it.
+Dense enough (~250 points over a night) to read as a continuous colored
+trace. Server-auto-assigned categorical colors, not the specific purple/
+blue/green/amber palette D12 hand-picked — no evidence found that xychart
+supports an explicit value→color map the way the old state-timeline
+mappings did.
+
+**First deploy of this design was actually broken** — copied the
+`"x": "fieldname"`, `"pointColor": {"field": "fieldname"}` shape from
+Trends' existing correlation-row xychart panels (assumed working prior
+art) without verifying it against *this* Grafana version. Symptom once
+live: uniform single-color points, no line connecting them, no visible
+stage variety. Root-caused by reading the xychart plugin's actual
+TypeScript source inside the running container
+(`/usr/share/grafana/public/app/plugins/panel/xychart/panelcfg.gen.ts` vs
+`panelcfgold.gen.ts`) rather than guessing further: Grafana 13's xychart
+uses a *matcher*-based options schema —
+`"options": {"mapping": "manual", "series": [{"x": {"matcher": {"id":
+"byName", "options": "fieldname"}}, "y": {...}, "color": {...}}]}` — and
+`fieldConfig.defaults.custom.show` defaults to `"points"` only, never
+`"points+lines"`, unless set explicitly. The plain-string shape used
+throughout (here and in Trends) is from an older schema
+(`panelcfgold.gen.ts`) that a migration handler *can* upgrade automatically
+— but only when `panel.pluginVersion` is unset or `< 11.1`, and evidently
+didn't trigger cleanly here. Trends' existing xychart panels use the same
+old-style shape and have never been visually confirmed either — worth
+checking next time that dashboard is actually opened in a browser, not
+assumed correct because it shipped first.
+
+**Rejected**: the scheduled-script alternative D13 flagged as worth
+reconsidering (rewrite the dashboard JSON's absolute time bounds each
+morning, letting the 30s file-provisioning watcher pick it up) — would
+have kept the native background bands, but at the cost of a new
+operational component (something to schedule, something to keep in sync
+with git-based deployment of the same file, something that can fail
+silently). The numeric-axis approach needed no new infrastructure at all
+and directly eliminates the failure mode rather than working around it,
+which is why it won over rewriting time bounds precisely.
+
+**Left inconsistent, not fixed here**: "Yesterday's activity" (steps/AZM,
+a stat tile) still means calendar-day yesterday, not bedtime-anchored like
+the HR panel now sitting next to it in the same row. It's not subject to
+the axis-drift bug (stat tiles don't have an axis), so it wasn't in scope
+for this fix, but the two panels now describe "yesterday" differently.
+Worth reconciling later.
 
 ## Risks / Trade-offs
 

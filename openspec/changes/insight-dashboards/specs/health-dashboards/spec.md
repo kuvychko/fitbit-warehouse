@@ -62,12 +62,16 @@ The project SHALL ship a provisioned Morning Report dashboard covering the
 last night and previous day, identifying "last night" via
 `health.primary_sleep_session` (never `sleep_session.main_sleep` directly,
 which is unset for API-synced nights): a merged hypnogram+heart-rate overlay,
-duration and efficiency, a readiness composite, recovery metrics (HRV,
-resting heart rate, breathing rate, overnight SpO2, nightly skin-temperature
-deviation) each shown against its `daily_baseline` median with deviation
-direction, a nap indicator, today's weigh-in, today's live activity so far,
-yesterday's heart-rate curve and activity recap, and a "data as of" freshness
-indicator reflecting the newest synced sample.
+sleep duration (efficiency omitted — Takeout-only, see design.md D14
+correction), a readiness composite, recovery metrics (HRV, resting heart
+rate, breathing rate, overnight SpO2, nightly skin-temperature deviation)
+each shown against its `daily_baseline` median with deviation direction, a
+nap indicator, today's weigh-in, today's live activity so far, a
+bedtime-anchored heart-rate curve for the 24h before sleep and a
+wake-anchored one for today so far (both locked to `primary_sleep_session`
+rather than a calendar day — see design.md D15), yesterday's activity
+recap, and a "data as of" freshness indicator reflecting the newest synced
+sample.
 
 #### Scenario: Fresh by morning
 - **WHEN** the 2-hourly poller has synced last night's sleep by ~08:00 local
@@ -86,29 +90,39 @@ indicator reflecting the newest synced sample.
   Takeout-backfilled night — because it resolves "last night" through
   `primary_sleep_session`
 
-### Requirement: Hypnogram and heart rate as one overlay
-The hypnogram SHALL render as colored background regions (one per sleep
-stage, distinct fixed color) layered behind the nighttime heart-rate line in
-a single panel, not as separate panels. The panel SHALL use a panel-level
-time override tighter than the dashboard's default range (not the full
-dashboard-wide range), so a typical night's sleep is comfortably visible
-without manual zooming. **Not exact ±10-minute auto-zoom**: Grafana's native
-region annotations (the mechanism used for the colored bands) require a
-time-domain axis, which rules out the numeric auto-fit axis that would give
-pixel-exact framing — see design.md D13 for the investigation. The fixed
-window may occasionally clip an unusually early or late night; the user can
-widen the panel's time range manually in Grafana.
+### Requirement: Hypnogram and heart rate as one overlay, locked to the actual sleep event
+The hypnogram and nighttime heart rate SHALL render in a single panel, not
+as separate panels, with sleep stages visually distinguishable. The panel's
+visible extent SHALL be locked to the actual `primary_sleep_session` for the
+most recent night — exactly, not approximately — regardless of what time of
+day the dashboard is viewed. **Not a Grafana time-range mechanism**: every
+approach that routed through Grafana's "now"-relative time picker (a
+variable-interpolated time range, a relative panel-level override, a wider
+dashboard default) drifted depending on viewing time, because these
+panels' real anchor is a fixed past event, not "now" — see design.md D15.
+The panel instead uses a numeric X axis (hours relative to sleep onset)
+computed in SQL, which cannot drift because it never references "now" at
+all. Sleep-stage distinction is per-point coloring (each heart-rate sample
+tagged with its containing stage), not background bands — Grafana's native
+region-annotation overlay (the original mechanism, design.md D12) requires
+a time-domain axis incompatible with the numeric one this fix depends on.
 
 #### Scenario: Stages are visually distinct
 - **WHEN** last night includes deep, light, REM, and wake segments
-- **THEN** each renders as its own background color behind the HR line, and
-  the HR line remains readable through the shading
+- **THEN** each is distinguishable by color on the heart-rate trace
 
-#### Scenario: Typical night needs no manual zoom
-- **WHEN** the dashboard loads for a night with bedtime and wake time within
-  the panel's fixed override window
-- **THEN** the full sleep session is visible without the user adjusting the
-  time picker
+#### Scenario: Same night, viewed at different times of day
+- **WHEN** the dashboard is loaded once in the morning and again that
+  evening, with no new sleep session in between
+- **THEN** both views show the identical sleep session and window — neither
+  the framing nor the underlying data differs by viewing time
+
+#### Scenario: Hour-offset axis has a stated wall-clock reference
+- **WHEN** a user looks at the hypnogram, "Yesterday's heart rate," or
+  "Today's heart rate" panel, each showing hours relative to sleep onset or
+  wake rather than clock time
+- **THEN** the actual bedtime and wake clock times those offsets are
+  relative to are visible elsewhere on the dashboard, not left implicit
 
 ### Requirement: Readiness composite replaces the live Sleep Score
 Because Fitbit's proprietary Sleep Score has no equivalent in the Google
