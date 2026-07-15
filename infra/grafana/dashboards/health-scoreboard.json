@@ -197,7 +197,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2\n     + sum(minutes) FILTER (WHERE zone = 'FAT_BURN') AS \"AZM (7d, WHO-weighted)\"\nFROM health.azm_hourly\nWHERE hour >= (now() AT TIME ZONE '$timezone')::date - 6 AND hour < (now() AT TIME ZONE '$timezone')::date + 1"
+          "rawSql": "SELECT sum(minutes) FILTER (WHERE zone IN ('CARDIO', 'PEAK')) * 2\n     + sum(minutes) FILTER (WHERE zone = 'FAT_BURN') AS \"AZM (7d, WHO-weighted)\"\nFROM health.azm_hourly\nWHERE hour >= ((((now() AT TIME ZONE '$timezone')::date - 6))::timestamp AT TIME ZONE '$timezone')\n  AND hour <  ((((now() AT TIME ZONE '$timezone')::date + 1))::timestamp AT TIME ZONE '$timezone')"
         }
       ]
     }
