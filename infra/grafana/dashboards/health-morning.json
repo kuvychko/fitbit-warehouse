@@ -47,7 +47,7 @@
       "description": "Heart rate over last night's main sleep session (± 10min padding), colored per-point by sleep stage. X axis is hours since sleep onset (see the \"Sleep timing\" panel below for the actual clock time this references) rather than wall-clock time, so this panel is locked to the actual sleep episode and can't drift depending on when during the day it's viewed (design.md D15). Stage coloring is numeric (stage_code 0-3) with a thresholds override, not a text field directly - xychart's color matching only ever considers numeric fields (confirmed in the plugin's own source), so a text stage column is silently ignored no matter how it's referenced.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 4 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 4 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 6 }, "show": "points+lines" } },
         "overrides": [
@@ -82,7 +82,7 @@
       "description": "The actual clock-time reference for the hour-offset X axes on the sleep/HR panels: hour 0 on \"Last night's sleep\" and \"Yesterday's heart rate\" is this bedtime; hour 0 on \"Today's heart rate\" is this wake time.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 10 },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 16 },
       "fieldConfig": { "defaults": { "unit": "dateTimeAsLocal", "color": { "mode": "fixed", "fixedColor": "#898781" } }, "overrides": [] },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false },
@@ -105,7 +105,7 @@
       "title": "Sleep stage colors",
       "description": "xychart's built-in legend is series-level (would just show \"bpm\"), not per-point-category - it can't explain what each color on the hypnogram trace means, so this is a plain text swatch key instead.",
       "type": "text",
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 10 },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 16 },
       "options": {
         "mode": "html",
         "content": "<div style=\"line-height:1.9\"><span style=\"display:inline-block;width:11px;height:11px;background-color:#4a3aa7;border-radius:2px;margin-right:6px;\"></span>Deep<br/><span style=\"display:inline-block;width:11px;height:11px;background-color:#2a78d6;border-radius:2px;margin-right:6px;\"></span>Light<br/><span style=\"display:inline-block;width:11px;height:11px;background-color:#1baf7a;border-radius:2px;margin-right:6px;\"></span>REM<br/><span style=\"display:inline-block;width:11px;height:11px;background-color:#eda100;border-radius:2px;margin-right:6px;\"></span>Wake</div>"
@@ -117,7 +117,7 @@
       "description": "Composite of last night's HRV, resting HR, and sleep minutes vs their 30d baselines (sign-corrected, IQR-scaled). Vibe = average across available components. Caution = worst single component, so one bad metric can't be averaged away by otherwise-good ones. Not Fitbit's Sleep Score — that's Takeout-only and unavailable for API-synced nights (see design.md D11).",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 16 },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 22 },
       "fieldConfig": {
         "defaults": { "unit": "none", "decimals": 2, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
           { "color": "#d03b3b", "value": null },
@@ -141,7 +141,7 @@
       "description": "Efficiency dropped from this card: it's Takeout-only (map_sleep leaves it unset for API-synced sessions, same class of gap as main_sleep/log_id), so it would read blank on every sync-only night. A naive minutes_asleep/time_in_bed approximation was tried and rejected: it undershoots Fitbit's real figure by a consistent 5-6 points on backfilled nights where both are known, which would be actively misleading, not just approximate.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 10 },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 16 },
       "fieldConfig": {
         "defaults": { "unit": "none" },
         "overrides": []
@@ -161,7 +161,7 @@
       "description": "Average and minimum blood oxygen over last night's sleep window. Raw query, not baseline-compared — folding SpO2 into daily_baseline was tried and reverted for a performance regression (see design.md D14).",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 10 },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 16 },
       "fieldConfig": { "defaults": { "unit": "none", "decimals": 1 }, "overrides": [] },
       "targets": [
         {
@@ -178,7 +178,7 @@
       "description": "Any sleep_session on the same civil day as last night's primary session, other than the primary session itself.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 16 },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 22 },
       "fieldConfig": { "defaults": { "unit": "none", "noValue": "No nap today" }, "overrides": [] },
       "targets": [
         {
@@ -194,7 +194,7 @@
       "title": "HRV vs 30d baseline",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 16 },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 22 },
       "fieldConfig": {
         "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
           { "color": "#d03b3b", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#0ca30c", "value": 0 }
@@ -216,7 +216,7 @@
       "description": "Lower than baseline generally reads as a good recovery sign.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 16 },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 22 },
       "fieldConfig": {
         "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
           { "color": "#0ca30c", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#d03b3b", "value": 0 }
@@ -238,7 +238,7 @@
       "description": "Takeout-only: the API sync has no breathing-rate puller, so this stops updating past the last backfill on a sync-only deployment.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 22 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 28 },
       "fieldConfig": {
         "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
           { "color": "#0ca30c", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#d03b3b", "value": 0 }
@@ -260,7 +260,7 @@
       "description": "An elevated deviation above the usual baseline can be an early illness signal. Takeout-only: the API sync has no temperature puller, so this stops updating past the last backfill on a sync-only deployment.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 22 },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 28 },
       "fieldConfig": {
         "defaults": { "unit": "none", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
           { "color": "#0ca30c", "value": null }, { "color": "#898781", "value": -0.0001 }, { "color": "#d03b3b", "value": 0 }
@@ -282,7 +282,7 @@
       "description": "The 24h leading up to last night's bedtime (primary_sleep_session.start_time), not a UTC/civil-day 'yesterday' - anchored to the actual sleep episode for the same drift-free reason as panel 2. X axis is hours before bedtime (negative = earlier).",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 28 },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 34 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 4 }, "show": "points+lines" }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
         "overrides": []
@@ -307,7 +307,7 @@
       "description": "Still calendar-day 'yesterday' (steps_daily), not bedtime-anchored like the panel above - a stat tile isn't subject to the axis-drift problem, so it wasn't in scope for this fix. Worth reconciling later so both panels mean the same 'yesterday'.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 28 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 34 },
       "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
       "targets": [
         {
@@ -324,7 +324,7 @@
       "description": "Since waking up (primary_sleep_session.end_time) - keeps growing through the day as new samples sync in, same live-updating idea as panel 13. X axis is hours since wake.",
       "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 36 },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 42 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 4 }, "show": "points+lines" }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
         "overrides": []
@@ -349,7 +349,7 @@
       "description": "Live cumulative steps/AZM since local midnight, from the real-time-enabled hourly aggregates — updates through the day, not just at report time.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 36 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 42 },
       "fieldConfig": { "defaults": { "unit": "none", "noValue": "No data yet today" }, "overrides": [] },
       "targets": [
         {
@@ -365,7 +365,7 @@
       "title": "Today's weigh-in",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 44 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 50 },
       "fieldConfig": { "defaults": { "unit": "none", "decimals": 1, "noValue": "Not weighed in yet today" }, "overrides": [] },
       "targets": [
         {
