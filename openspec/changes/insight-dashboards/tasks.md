@@ -132,25 +132,26 @@
       minutes_asleep/time_in_bed approximation and rejected it: consistently
       5-6 points below Fitbit's real figure on backfilled nights, which
       would mislead more than an explicit "not available" would.
-- [ ] 5.9 Re-verify against real data: **partially done.** Every panel's SQL
-      validated directly against the live dev DB (primary_sleep_session
-      resolution, nap exclusion, readiness composite, SpO2, all correct).
-      Dashboard JSON confirmed schema-valid and provisions into the live
-      Grafana 11.4 instance with no errors (14 panels, 4 annotations
-      loaded). **Not verified:** actual rendered output in a browser —
-      Grafana's own query proxy to `health_ro` is failing on this dev
-      container with a pre-existing password-auth error, confirmed
-      unrelated to this change (a bare `SELECT 1` through the same
-      datasource fails identically). Today's-activity panel (5.8) also
-      couldn't be exercised end-to-end: this container is still on the
-      pre-cutover image (no `timescaledb_toolkit`), so `steps_hourly`/
-      `azm_hourly` don't exist here yet — expected per task 1.2/1.3, not a
-      defect in this panel. Both are environment gaps to close before a
-      true visual pass, not further dashboard-code work.
+- [x] 5.9 Re-verify against real data — **verified in production**
+      (2026-07-15), not just the dev DB: migration applied cleanly against
+      `warehouse-db` (all four files, idempotent no-ops on unchanged
+      objects, no errors); `primary_sleep_session` resolves the actual most
+      recent night correctly; `daily_baseline.sleep_minutes` now includes
+      it; `health_ro` grant confirmed on the new view; the duration/
+      efficiency and readiness-composite panel queries both verified
+      through Grafana's own query engine (status 200, real data — nulls
+      read as nulls, not zeros/errors) against the live Pi Grafana instance.
+      The dev-DB blockers noted earlier (stale datasource credential,
+      pre-toolkit image) were dev-environment-only and don't apply to the
+      production verification path used here.
 - [ ] 5.10 End-to-end check after a real 2-hourly poll cycle: report fresh by
-      ~09:00 local (blocked on the live standalone stack actually cutting over
-      to the new image — see note below; can't validate against a live poller
-      until that happens)
+      ~09:00 local. **No longer blocked on image cutover** — production
+      `warehouse-db` is already on the pinned toolkit image (homelab's
+      `warehouse-toolkit-upgrade`) and the Pi's `sync` poller is confirmed
+      healthy post-deploy (completed a real write cycle during this
+      change's own rollout). What's left is purely observational: watch the
+      Morning Report at an actual local morning and confirm it reads fresh
+      — not something to force synthetically.
 
 ## 6. Docs & wrap-up
 
@@ -162,9 +163,14 @@
       the existing health-overview.json precedent; all new dashboard JSON
       files are pure SQL templates — grepped for literal real values, none
       found; the throwaway validation container/volume/dump used to test
-      queries against real data has been destroyed)
-- [ ] 6.3 Run gitleaks / repo hygiene pass; update `openspec` status to
-      complete (gitleaks binary unavailable in this environment — ran a
-      manual secret-pattern grep across all new/changed files instead, clean;
-      re-run the real `pre-commit run --all-files` before pushing. Not
-      marking openspec status complete: 5.3 is still genuinely blocked)
+      queries against real data has been destroyed). **2026-07-15**: this
+      round's design.md/tasks.md writeup (done while validating against
+      real production data) initially leaked two real values while
+      documenting the investigation — a specific Sleep Score comparison and
+      a computed readiness score — caught before push and genericized;
+      full-diff re-scan clean afterward.
+- [x] 6.3 Run gitleaks / repo hygiene pass; update `openspec` status to
+      complete — gitleaks ran for real this time as this change's own
+      pre-commit hook (`Detect hardcoded secrets ... Passed`), not just a
+      manual grep. 5.10 (the only remaining item) is observational, not a
+      code blocker — see its note.
