@@ -33,9 +33,13 @@ almost nothing; retrofitting it later means reworking dashboards and caggs.
     a correlation row (activity↔weight, activity↔sleep, activity↔RHR scatters).
   - **Scoreboard** (10–30 days): calendar heatmap, streaks, week-over-week
     deltas vs 30d baseline, WHO activity-minutes target, personal bests.
-  - **Morning report**: last night's hypnogram + sleep score, recovery metrics
-    (HRV, RHR, breathing rate, skin temp) vs 30d baseline, yesterday recap,
-    "data as of" freshness stat.
+  - **Morning report**: last night's hypnogram merged with the nighttime HR
+    curve as one colored overlay (auto-zoomed to the sleep window), a
+    readiness composite in place of the live Sleep Score (unavailable from
+    the API sync source — see Amendment below), recovery metrics (HRV, RHR,
+    breathing rate, SpO2, skin temp) vs 30d baseline, a nap indicator,
+    today's weigh-in, today's live activity so far, yesterday recap, "data
+    as of" freshness stat.
 - **Docs**: README/dashboard docs updated for the new user journey step; the
   toolkit requirement documented for both deployment modes.
 
@@ -68,3 +72,24 @@ almost nothing; retrofitting it later means reworking dashboards and caggs.
   change.
 - **Docs**: README, `.env.example` untouched (no new config); dashboard docs
   gain the two new journey entries.
+
+## Amendment (2026-07-13)
+
+Exploring a live discrepancy between the stored Sleep Score and the Fitbit
+app's score for the same night surfaced that the morning report's "last
+night" lookup was broken, not stale: `sleep_session.main_sleep` is a
+Takeout-only field —
+the Google Health API sync payload has no equivalent, so every query
+filtering `WHERE main_sleep` has silently excluded every sync-sourced night
+since backfill ended, permanently pinned to the last Takeout-backfilled
+night. The same gap freezes `daily_metric`'s `sleep_minutes`/`sleep_score`
+rows. Tasks 5.1/5.2 were marked done based on the dashboard rendering, not
+on verifying which night it actually rendered — corrected in tasks.md.
+
+Fix and scope addition (see design.md D10–D14 and the updated specs):
+a `primary_sleep_session` view replacing the `main_sleep` dependency
+everywhere; a locally-computed readiness composite replacing the live Sleep
+Score panel (the score itself has no live source — not fixable by better
+SQL); the hypnogram merged with the nighttime HR curve as one auto-zoomed
+overlay; and morning-report add-ons identified while investigating (overnight
+SpO2, a nap indicator, today's weigh-in, today's live activity).

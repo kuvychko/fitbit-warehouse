@@ -31,6 +31,17 @@
 - [x] 2.8 Validate cagg correctness on real data: daily percentiles from
       rolled-up sketches vs raw `percentile_cont` spot-check days; sums vs
       `steps_daily` dedup behavior
+- [x] 2.9 **(added 2026-07-13)** Add `health.primary_sleep_session` view
+      (design.md D10): main sleep per civil day = greatest `minutes_asleep`
+      (fallback `duration_ms`), computed uniformly regardless of `source`.
+      Fix `daily_metric.sleep_minutes` to source from it instead of
+      `ss.main_sleep`. Amended in place in `004_analytics.sql` (confirmed
+      via the compose file's own migration model: "every migration is
+      idempotent... applies all of them on every invocation — there is no
+      version table to get out of sync," so this needed no new migration
+      number. Validated live against real data: correctly resolves a
+      previously-invisible API-synced night that `main_sleep` filtering had
+      been skipping.
 
 ## 3. Trends dashboard
 
@@ -58,13 +69,85 @@
 
 ## 5. Morning report dashboard
 
-- [x] 5.1 Author `health-morning.json`: hypnogram (state timeline over
+- [x] 5.1 ~~Author `health-morning.json`: hypnogram (state timeline over
       `sleep_stage`), sleep score/efficiency stats, recovery tiles (HRV, RHR,
       breathing rate, temp deviation vs `daily_baseline` with direction
-      arrows), yesterday's HR curve + AZM + steps recap
-- [x] 5.2 Add "data as of" freshness stat (newest synced sample) and verify
-      the pre-sync morning state reads as "still syncing", not stale-as-fresh
-- [ ] 5.3 End-to-end check after a real 2-hourly poll cycle: report fresh by
+      arrows), yesterday's HR curve + AZM + steps recap~~ **REOPENED
+      2026-07-13**: the panels rendered, but "done" was never checked against
+      which night they actually showed. `WHERE main_sleep` silently excludes
+      every API-synced night (Takeout-only field — see proposal.md
+      Amendment, design.md D10), so this had been showing the last
+      Takeout-backfilled night indefinitely, not last night. **Re-closed
+      2026-07-13** via 5.4–5.8 (rework complete and validated against real
+      data to the extent 5.9 describes).
+- [x] 5.2 ~~Add "data as of" freshness stat (newest synced sample) and verify
+      the pre-sync morning state reads as "still syncing", not
+      stale-as-fresh~~ **Freshness stat itself (panel id 1) is fine and
+      stays as-is** — it independently reads `max(end_time)` etc. across the
+      raw tables, not gated on `main_sleep`. Was never actually broken; the
+      reopening was only to avoid re-affirming "done" without re-checking it
+      alongside 5.1. Re-confirmed: still correct, unchanged.
+- [x] 5.4 **(added 2026-07-13)** Rework "last night" resolution: hypnogram,
+      duration/efficiency queries join through `health.primary_sleep_session`
+      (2.9) instead of `sleep_session.main_sleep`. Recovery tiles
+      (HRV/RHR/breathing/temp) turned out not to need this — they read
+      `daily_baseline` directly, never joined `sleep_session` at all.
+      Validated live: correctly resolves the most recent API-synced night
+      (previously invisible under the old `main_sleep` filter), correctly
+      excludes both a same-night nap and a duplicate lower-minutes backfill
+      row.
+- [x] 5.5 Merge hypnogram into the nighttime HR panel (design.md D12): one
+      Grafana annotation-region query per sleep stage (fixed color each),
+      layered behind the HR line in a single panel, replacing the separate
+      state-timeline panel. Validated live: dashboard reloaded via the 30s
+      file-provisioning watcher with all 4 annotation queries and the HR
+      panel intact, no provisioning errors; each stage query independently
+      confirmed against real data.
+- [x] 5.6 **(resolved during implementation, design.md D13)** True ±10min
+      auto-zoom isn't achievable: spiked variable-driven `time.from`/
+      `time.to` live against Grafana 11.4 — confirmed dead end (stored as
+      an inert literal, dateMath doesn't interpolate variables). The
+      documented numeric-x-axis fallback conflicts with 5.5's native
+      annotation regions (xychart panels can't host them). Resolved with
+      the author: panel-level time override (`timeFrom: "13h"`,
+      `timeShift: "1h"` → now-14h to now-1h), scoped to this panel only so
+      other panels' default range is untouched
+- [x] 5.7 Replace the Sleep Score stat with the readiness composite
+      (design.md D11, corrected during implementation): vibe score (mean of
+      sign-corrected, IQR-scaled `daily_baseline` deviations across
+      HRV/RHR/sleep_minutes only — breathing rate/temp are Takeout-only,
+      SpO2's baseline was reverted for a perf regression, see D14) and a
+      worst-single-metric caution indicator; leave `health.sleep_score` and
+      its Trends/Scoreboard usage untouched. Validated live: query returns a
+      sensible vibe/caution pair against real baseline data (values omitted
+      here — derived from real personal metrics, not fit for a public repo).
+- [x] 5.8 Add overnight SpO2 (avg/min over the primary sleep window, raw
+      query against `health.spo2`), a nap indicator (any non-primary
+      `sleep_session` row for the same day, from 2.9), today's weigh-in
+      (raw query against `health.weight`), and a live "today's activity"
+      stat (steps/AZM/calories accumulated since local midnight, from the
+      existing real-time hourly aggregates). Duration/efficiency panel also
+      picked up an honest "n/a (Takeout-only)" label for efficiency instead
+      of showing blank or a fabricated estimate — tried a
+      minutes_asleep/time_in_bed approximation and rejected it: consistently
+      5-6 points below Fitbit's real figure on backfilled nights, which
+      would mislead more than an explicit "not available" would.
+- [ ] 5.9 Re-verify against real data: **partially done.** Every panel's SQL
+      validated directly against the live dev DB (primary_sleep_session
+      resolution, nap exclusion, readiness composite, SpO2, all correct).
+      Dashboard JSON confirmed schema-valid and provisions into the live
+      Grafana 11.4 instance with no errors (14 panels, 4 annotations
+      loaded). **Not verified:** actual rendered output in a browser —
+      Grafana's own query proxy to `health_ro` is failing on this dev
+      container with a pre-existing password-auth error, confirmed
+      unrelated to this change (a bare `SELECT 1` through the same
+      datasource fails identically). Today's-activity panel (5.8) also
+      couldn't be exercised end-to-end: this container is still on the
+      pre-cutover image (no `timescaledb_toolkit`), so `steps_hourly`/
+      `azm_hourly` don't exist here yet — expected per task 1.2/1.3, not a
+      defect in this panel. Both are environment gaps to close before a
+      true visual pass, not further dashboard-code work.
+- [ ] 5.10 End-to-end check after a real 2-hourly poll cycle: report fresh by
       ~09:00 local (blocked on the live standalone stack actually cutting over
       to the new image — see note below; can't validate against a live poller
       until that happens)

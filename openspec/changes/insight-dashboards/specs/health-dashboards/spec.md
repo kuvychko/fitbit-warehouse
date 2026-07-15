@@ -59,11 +59,15 @@ absolute goals (except the WHO panel).
 
 ### Requirement: Morning report dashboard
 The project SHALL ship a provisioned Morning Report dashboard covering the
-last night and previous day: a hypnogram from `sleep_stage`, sleep score and
-efficiency, recovery metrics (HRV, resting heart rate, breathing rate, nightly
-skin-temperature deviation) each shown against its `daily_baseline` median
-with deviation direction, yesterday's heart-rate curve and activity recap, and
-a "data as of" freshness indicator reflecting the newest synced sample.
+last night and previous day, identifying "last night" via
+`health.primary_sleep_session` (never `sleep_session.main_sleep` directly,
+which is unset for API-synced nights): a merged hypnogram+heart-rate overlay,
+duration and efficiency, a readiness composite, recovery metrics (HRV,
+resting heart rate, breathing rate, overnight SpO2, nightly skin-temperature
+deviation) each shown against its `daily_baseline` median with deviation
+direction, a nap indicator, today's weigh-in, today's live activity so far,
+yesterday's heart-rate curve and activity recap, and a "data as of" freshness
+indicator reflecting the newest synced sample.
 
 #### Scenario: Fresh by morning
 - **WHEN** the 2-hourly poller has synced last night's sleep by ~08:00 local
@@ -74,3 +78,76 @@ a "data as of" freshness indicator reflecting the newest synced sample.
 - **WHEN** the report is viewed before last night's data has synced
 - **THEN** the freshness indicator makes the staleness obvious instead of
   silently showing the prior night as current
+
+#### Scenario: Report resolves the sync-only night, not the last backfilled one
+- **WHEN** every `sleep_session` row for the last several nights was written
+  by the API poller (`main_sleep IS NULL` on all of them)
+- **THEN** the report still shows last night — not the most recent
+  Takeout-backfilled night — because it resolves "last night" through
+  `primary_sleep_session`
+
+### Requirement: Hypnogram and heart rate as one overlay
+The hypnogram SHALL render as colored background regions (one per sleep
+stage, distinct fixed color) layered behind the nighttime heart-rate line in
+a single panel, not as separate panels. The panel SHALL use a panel-level
+time override tighter than the dashboard's default range (not the full
+dashboard-wide range), so a typical night's sleep is comfortably visible
+without manual zooming. **Not exact ±10-minute auto-zoom**: Grafana's native
+region annotations (the mechanism used for the colored bands) require a
+time-domain axis, which rules out the numeric auto-fit axis that would give
+pixel-exact framing — see design.md D13 for the investigation. The fixed
+window may occasionally clip an unusually early or late night; the user can
+widen the panel's time range manually in Grafana.
+
+#### Scenario: Stages are visually distinct
+- **WHEN** last night includes deep, light, REM, and wake segments
+- **THEN** each renders as its own background color behind the HR line, and
+  the HR line remains readable through the shading
+
+#### Scenario: Typical night needs no manual zoom
+- **WHEN** the dashboard loads for a night with bedtime and wake time within
+  the panel's fixed override window
+- **THEN** the full sleep session is visible without the user adjusting the
+  time picker
+
+### Requirement: Readiness composite replaces the live Sleep Score
+Because Fitbit's proprietary Sleep Score has no equivalent in the Google
+Health API sync payload, the morning report SHALL NOT rely on
+`health.sleep_score` for nights synced via the API. Instead it SHALL show a
+readiness composite computed from `daily_baseline` deviations across HRV,
+resting heart rate, and sleep minutes — the metrics genuinely live via the
+API sync (breathing rate, nightly temperature, and SpO2 are excluded: the
+first two are Takeout-only with no API puller, and SpO2's baseline would
+require a schema change reverted during implementation for a performance
+regression — see design.md D11/D14): a smoothed average ("vibe") and a
+worst-single-metric caution indicator that a good average cannot mask.
+
+#### Scenario: One bad metric surfaces despite good others
+- **WHEN** resting heart rate deviation is well outside its baseline
+  p25–p75 but every other component is within its normal range
+- **THEN** the caution indicator flags it even though the averaged vibe
+  score alone would read as normal
+
+#### Scenario: Historical Sleep Score remains available elsewhere
+- **WHEN** a user looks at Trends or Scoreboard for a Takeout-backfilled
+  period
+- **THEN** the original Fitbit Sleep Score is still queryable from
+  `health.sleep_score` as before — only the morning report's live framing
+  changes
+
+### Requirement: Today's activity and recovery add-ons
+The morning report SHALL show a live cumulative stat for today's
+steps/AZM/calories so far (sourced from the real-time-enabled hourly
+aggregates), overnight SpO2 average/min for the primary sleep window, a nap
+indicator when a non-primary `sleep_session` row exists for the same day,
+and today's weigh-in when one exists.
+
+#### Scenario: Today's activity updates through the day
+- **WHEN** the dashboard is viewed mid-afternoon
+- **THEN** the activity stat reflects steps/AZM/calories accumulated since
+  midnight local, not zero and not yesterday's total
+
+#### Scenario: No nap, no weigh-in yet
+- **WHEN** there is no secondary sleep session today and no weight entry yet
+  today
+- **THEN** those panels read as absent/not-yet, not as zero or an error

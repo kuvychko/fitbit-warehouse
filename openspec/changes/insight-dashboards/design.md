@@ -105,11 +105,140 @@ it).
 - **Scoreboard**: stat tiles vs 30d baseline (green/red framed against own
   history, not fixed goals), calendar heatmap of steps, streak counters
   (gaps-and-islands SQL), WHO 150 min/week AZM bar, personal bests, 30d range.
-- **Morning report**: hypnogram (sleep_stage state timeline), recovery tiles
-  (HRV/RHR/breathing/temp vs baseline with deviation arrows), yesterday's HR
-  curve + AZM + steps, "data as of" freshness stat. `now-24h` range.
+- **Morning report**: hypnogram + nighttime HR merged overlay, readiness
+  composite (see D11), recovery tiles (HRV/RHR/breathing/SpO2/temp vs
+  baseline with deviation arrows), nap chip, today's weigh-in, today's
+  activity (live) + yesterday's HR curve/AZM/steps recap, "data as of"
+  freshness stat. Auto-zoomed to last night ± 10 min (see D13).
 Follow the dataviz skill when authoring panels (percentile bands, sequential
 year palette, heatmap scales).
+
+### D10. Primary sleep session inferred uniformly, not from a source flag
+**Discovered post-implementation** (2026-07-13, exploring a live score
+mismatch): `sleep_session.main_sleep` is Takeout-only. The Google Health API
+`sleep` resource carries only `interval`/`type`/`stages` — no `logId`,
+`mainSleep`, or `levels_summary` equivalent (confirmed against the payload
+shape in `tests/test_poller_mappers.py`; `sync/poller.py:map_sleep` correctly
+leaves these `NULL` because the API gives it nothing to map). Every query
+that identifies "last night" filtered `WHERE main_sleep`, which silently
+excludes every sync-sourced night forever — the morning report has been
+stuck on the last Takeout-backfilled night since sync took over, not
+actually last night. This also broke `daily_metric`'s `sleep_minutes` and
+`sleep_score` rows (both gated on `ss.main_sleep`, `004_analytics.sql:161-168`),
+freezing their 30-day baselines the same way.
+
+Fix: a `health.primary_sleep_session` view defining "main sleep" uniformly
+as the session with the greatest `minutes_asleep` (falling back to
+`duration_ms` when null) per civil `day`, computed the same way regardless
+of `source`. Every place that currently does `WHERE main_sleep` (hypnogram,
+duration/efficiency stat, `daily_metric.sleep_minutes`, naps) reads this
+view instead. Naps fall out for free: any other same-day `sleep_session` row
+not selected as primary.
+*Alternative rejected*: keep using `main_sleep` for backfill rows and add a
+separate inferred-flag path for API rows — two definitions of "main sleep"
+that could disagree at the backfill/sync boundary, exactly the kind of seam
+this project has otherwise avoided (see the timezone-fidelity and
+breathing-rate-day-join precedents already in `004_analytics.sql`).
+
+### D11. No live Sleep Score — a local readiness composite instead
+Fitbit's proprietary Sleep Score has no equivalent field anywhere in the
+Google Health API sleep payload (same evidence as D10). It is not a mapping
+bug; the number the app shows overnight isn't obtainable from the sync
+source at all. Rather than leave the morning report perpetually showing a
+stale Takeout-only number, replace it with two panels computed from metrics
+that *are* live: HRV, RHR, breathing rate, SpO2, temp deviation, sleep
+duration, and efficiency, each already available as a `daily_baseline`
+deviation.
+- **Vibe score**: mean of sign-corrected, IQR-scaled deviations across all
+  components — a smoothed single number.
+- **Caution flag**: worst single component (or "≥2 components outside
+  p25–p75"), so one bad metric (e.g. elevated temp) can't be averaged away
+  by an otherwise-good night — an average alone would mask exactly the
+  illness-signal case this panel exists for.
+Historical Sleep Score (Takeout-backfilled nights only) remains queryable
+in Trends/Scoreboard from `health.sleep_score` as-is; this only concerns the
+morning report's "how did I do last night" framing.
+
+**Correction during implementation (2026-07-13):** breathing rate and
+nightly skin temperature turn out to be Takeout-only too — `sync/poller.py`
+has no puller for either (grepped, zero matches), so their
+`daily_baseline` rows are just as frozen as `sleep_score`'s, for the same
+structural reason. The composite therefore draws from HRV, RHR, and sleep
+minutes — the three metrics genuinely live via the API and already present
+in `daily_baseline` without further schema changes (SpO2 was tried as a
+fourth and reverted for a perf reason — see D14). Three components is
+thinner than originally envisioned, but each one is real and won't
+silently freeze. Breathing rate/temp recovery tiles are unaffected by this
+change (out of this amendment's scope) but will silently go stale the same
+way `main_sleep` did; worth its own follow-up, not fixed here.
+
+### D12. Hypnogram merged with nighttime HR via per-stage region annotations
+Grafana natively renders annotation queries (`time`, `timeEnd`, `tags`) as
+colored background regions on a timeseries panel — no custom plugin needed.
+One annotation query per sleep stage (`WHERE level = 'deep'/'light'/'rem'/
+'wake'`), each assigned a fixed color, layered behind the nighttime HR line
+in a single panel — the Fitbit-app-style combined view, replacing the
+separate state-timeline + HR panels.
+*Alternative rejected*: stack a state-timeline panel directly above/below
+the HR timeseries with matched x-axis to fake a merge — visually close but
+still two panels with two independent legends/tooltips; true annotation
+regions are a real overlay in one panel.
+
+### D13. No true auto-zoom — a fixed, generous relative window instead
+Spiked live against the running Grafana 11.4 instance: saving a dashboard
+with `time.from`/`time.to` set to `${variable}` strings is accepted without
+validation (no special-casing), and Grafana's time range is resolved via
+`dateMath` before template variables are hydrated — `${var}` is never
+interpolated there. Confirmed dead end, not just a hunch.
+
+The originally-planned fallback (numeric "minutes since sleep onset" x-axis
+via an `xychart` panel, guaranteed to auto-fit) turned out to conflict with
+D12: Grafana's native region annotations — the mechanism D12 depends on for
+the colored stage bands — only attach to a time-domain axis. `xychart`
+panels don't support them. Auto-zoom and the colored overlay can't both be
+had through Grafana's built-in mechanisms simultaneously.
+
+Resolved with the author: keep the colored overlay (time-domain panel,
+native annotations), drop precise ±10 min auto-zoom. The merged panel gets
+a **panel-level time override** (`timeFrom: "13h"`, `timeShift: "1h"` →
+effectively `now-14h` to `now-1h`) — fixed relative to "now" at render
+time, not day-anchored, so it does drift as the day goes on and won't
+always perfectly frame an unusual night. Comfortably covers the observed
+real sleep windows (~21:30–05:30 local) on any normal morning viewing.
+Scoped as a panel-level override, not a dashboard-level time range change,
+so it doesn't affect other panels (e.g. "yesterday's heart rate," which
+still wants the dashboard's existing wider default). The user can always
+widen the panel's time range manually in Grafana.
+*Rejected*: a script that rewrites the dashboard JSON's absolute time range
+each morning (the existing 30s file-provisioning auto-reload would pick it
+up) — would give true precision with both mechanisms intact, but is a new
+scheduled component not currently in scope; worth reconsidering later if
+the fixed window proves too imprecise in practice.
+
+### D14. Today's activity and weigh-in as raw dashboard queries; SpO2 promoted to `daily_metric`
+No new schema objects for activity/weight: `steps_hourly`/`azm_hourly`/
+`calories_hourly` (D1, already real-time) cover today's live cumulative
+activity stat the same way the existing "yesterday's activity" panel reads
+them; today's weigh-in reads `health.weight` directly.
+
+**Tried and reverted during implementation:** promoting SpO2 into
+`daily_metric` (avg `pct` over each night's `primary_sleep_session` window)
+was tempting — live data confirms ~400-500 overnight samples/night via the
+API poller, genuinely live unlike breathing rate/temp — but it hit the
+exact perf blowup this file already has a scar for: `daily_metric` is a
+plain (non-materialized) view, so `daily_baseline`'s LATERAL correlated
+subquery re-evaluates every UNION ALL branch per (day, metric) row, and a
+raw join+aggregate against the `spo2` hypertable inside that branch does
+not survive being re-run that many times. Confirmed live: cancelled after
+>2 minutes still running against ~2 weeks of data. This is the same failure
+mode already reverted once for breathing_rate's day-join (git history:
+"Revert breathing_rate LATERAL join in daily_metric (perf regression)").
+SpO2 stays a raw per-panel query as originally planned — no 30-day baseline
+for it, just last night's avg/min shown directly. The readiness composite
+(D11) accordingly drops back to HRV, RHR, and sleep minutes only — three
+components, not four. A materialized/cagg-backed SpO2 daily summary could
+revisit this later, but that's real new scope, not a fit for this
+amendment.
 
 ## Risks / Trade-offs
 
@@ -134,6 +263,20 @@ year palette, heatmap scales).
 - [BREAKING: standalone volumes can't cross musl→glibc] → called out in
   proposal/README; project is days old, no known external users; fresh init
   + idempotent migrations/backfill is the documented path.
+- [`main_sleep`/`log_id`/`levels_summary` are Takeout-only; sync can never
+  populate them] → D10's `primary_sleep_session` view removes the
+  dependency on the flag entirely rather than trying to synthesize the
+  missing fields. Anything still joining `sleep_score` by `log_id` (baseline
+  view) will simply never match post-backfill nights — expected, per D11,
+  not a bug to chase further.
+- [Reopening 004_analytics.sql's `daily_metric` view after it has already
+  run in production] → `CREATE OR REPLACE VIEW` makes this a safe re-apply
+  (unlike the `IF NOT EXISTS` table/cagg statements in the same file); no
+  new migration number needed for the `sleep_minutes`/`sleep_score` join
+  fix or the new `primary_sleep_session` view. Confirm this reasoning holds
+  before implementation — if 004 is amended in place, the tasks.md
+  correction below should say so explicitly so a future reader doesn't
+  assume 004 was untouched since the original run.
 
 ## Migration Plan
 
@@ -152,3 +295,11 @@ year palette, heatmap scales).
   the pinned version's compressed-cagg semantics).
 - Whether `azm_hourly` needs a `zone` dimension in its primary grouping or a
   pivoted layout — decide when writing the WHO scoreboard query.
+- (D13) Does this Grafana version/schemaVersion honor a variable-interpolated
+  `time.from`/`time.to` on a provisioned dashboard? Spike before committing;
+  fall back to the minutes-since-onset numeric x-axis if not.
+- (D10) Amend `004_analytics.sql` in place vs. a new migration file for
+  `primary_sleep_session` and the `daily_metric` join fix — leaning toward
+  amending in place (views are `CREATE OR REPLACE`, safe to re-apply) but
+  confirm no downstream consumer depends on the current (broken) behavior
+  before doing so.

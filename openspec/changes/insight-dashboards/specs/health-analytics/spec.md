@@ -57,6 +57,29 @@ from this view so the definition never diverges.
   from baseline for the same day
 - **THEN** both derive from the same `daily_baseline` row and agree exactly
 
+### Requirement: Primary sleep session inference
+The schema SHALL provide a `health.primary_sleep_session` view identifying,
+per civil day, the "main sleep" session as the one with the greatest
+`minutes_asleep` (falling back to `duration_ms` when null) among that day's
+`sleep_session` rows — computed identically regardless of `source`. Every
+query that needs "last night" or "today's main sleep" SHALL use this view
+rather than filtering `sleep_session.main_sleep` directly, since that column
+is populated only for Takeout-backfilled rows and is always `NULL` for
+API-synced rows (the Google Health API sleep payload carries no equivalent
+field). `daily_metric`'s `sleep_minutes` row SHALL source from this view.
+
+#### Scenario: Sync-only night resolves correctly
+- **WHEN** a night's `sleep_session` row was written by the API poller
+  (`source = 'api'`, `main_sleep IS NULL`)
+- **THEN** `primary_sleep_session` still identifies it as that day's main
+  sleep if it is the longest session recorded for the day
+
+#### Scenario: Secondary same-day sessions are naps
+- **WHEN** a civil day has more than one `sleep_session` row
+- **THEN** every row other than the one selected by
+  `primary_sleep_session` for that day is a nap, queryable without a
+  separate table
+
 ### Requirement: Sleep composition view
 The schema SHALL provide a `sleep_composition` view unpacking per-stage minutes
 per night from `sleep_session.levels_summary`, handling both the stages

@@ -8,9 +8,10 @@
 --     sketches are composable (rollup() across hours -> true daily/weekly
 --     percentiles via approx_percentile()); plain percentile_cont() numbers
 --     are not. Requires timescaledb_toolkit.
---   * daily_baseline / sleep_composition are plain views (daily-grain source
---     data is cheap at any zoom) — the one shared "trailing 30-day median"
---     definition every dashboard reads, so it can't drift between them.
+--   * daily_baseline / sleep_composition / primary_sleep_session are plain
+--     views (daily-grain source data is cheap at any zoom) — the one shared
+--     "trailing 30-day median" definition every dashboard reads, so it
+--     can't drift between them.
 -- Idempotent: CREATE MATERIALIZED VIEW IF NOT EXISTS + policies with
 -- if_not_exists => TRUE; views are CREATE OR REPLACE; grants are safe to
 -- repeat.
@@ -134,6 +135,28 @@ FROM health.sleep_session ss
 CROSS JOIN LATERAL jsonb_each(ss.levels_summary) AS stage(key, value)
 WHERE ss.levels_summary IS NOT NULL;
 
+-- Primary sleep session ---------------------------------------------------
+-- sleep_session.main_sleep is Takeout-only: the Google Health API sleep
+-- payload has no equivalent field (confirmed against sync/poller.py's
+-- map_sleep and its test fixture), so it is always NULL on source = 'api'
+-- rows, and also on the googlefit-takeout rows from the optional Basis
+-- Peak/Google Fit import. Anything filtering `WHERE main_sleep` therefore
+-- permanently excludes every night from those two sources. Define "main
+-- sleep" uniformly instead: per civil day, the session with the most
+-- minutes_asleep (falling back to duration_ms when that's null, e.g. a
+-- classic-type session that predates stage-level asleep/awake splitting),
+-- computed the same way regardless of source. Every other same-day session
+-- is a nap. On nights where more than one source's row exists for the same
+-- day (observed transiently at the backfill/sync handoff), this can pick a
+-- different row than the source's own main_sleep flag would have —
+-- accepted: a single uniform definition beats two that can disagree.
+CREATE OR REPLACE VIEW health.primary_sleep_session AS
+SELECT DISTINCT ON (ss.day) ss.*
+FROM health.sleep_session ss
+ORDER BY ss.day,
+         COALESCE(ss.minutes_asleep, ss.duration_ms / 60000) DESC NULLS LAST,
+         ss.start_time DESC;
+
 -- Daily baseline --------------------------------------------------------
 -- health.daily_metric: every baseline-eligible metric normalized to
 -- (day, metric, value). Resting HR / HRV / steps are already one
@@ -147,6 +170,13 @@ WHERE ss.levels_summary IS NOT NULL;
 -- a separate per-minute table); daily_baseline's value-minus-median still
 -- yields a genuine deviation from the person's own 30-day baseline, which
 -- is the only thing that matters for the morning-report use case.
+-- sleep_score, breathing_rate, and nightly_temp are Takeout-only (no API
+-- puller for any of the three — sync/poller.py has nothing that writes
+-- health.sleep_score/breathing_rate/nightly_temperature); their rows here
+-- simply stop growing once a deployment is sync-only. Not a bug to fix in
+-- this view — sleep_minutes (via primary_sleep_session, see above) is the
+-- one sleep-adjacent metric that stays live; SpO2 stays out of this view
+-- entirely (see the comment below the nightly_temp branch).
 CREATE OR REPLACE VIEW health.daily_metric AS
 SELECT day, 'resting_hr'::text AS metric, bpm::double precision AS value
 FROM health.resting_heart_rate
@@ -159,8 +189,8 @@ SELECT day, 'steps', steps::double precision
 FROM health.steps_daily
 UNION ALL
 SELECT ss.day, 'sleep_minutes', ss.minutes_asleep::double precision
-FROM health.sleep_session ss
-WHERE ss.main_sleep AND ss.minutes_asleep IS NOT NULL
+FROM health.primary_sleep_session ss
+WHERE ss.minutes_asleep IS NOT NULL
 UNION ALL
 SELECT ss.day, 'sleep_score', sc.overall::double precision
 FROM health.sleep_score sc
@@ -191,6 +221,14 @@ SELECT COALESCE(ss.day, (nt.sleep_start AT TIME ZONE 'UTC')::date),
 FROM health.nightly_temperature nt
 LEFT JOIN health.sleep_session ss ON ss.start_time = nt.sleep_start
 WHERE nt.avg_c IS NOT NULL;
+-- SpO2 was tried here (join health.spo2 windowed by primary_sleep_session)
+-- and reverted: daily_metric is a plain view, so daily_baseline's LATERAL
+-- correlated subquery re-evaluates every UNION ALL branch per (day, metric)
+-- row it computes a baseline for — the same blowup already hit and reverted
+-- once for breathing_rate's day-join (git history, "Revert breathing_rate
+-- LATERAL join in daily_metric (perf regression)"). Confirmed live: >2 min
+-- and still running against ~2 weeks of data before being cancelled.
+-- SpO2 stays a raw per-panel query in the morning report (D14) instead.
 
 -- health.daily_baseline: each metric's value alongside the median/p25/p75
 -- of that same metric over the 30 days strictly before it (today never
@@ -219,7 +257,8 @@ CROSS JOIN LATERAL (
 -- Grants ------------------------------------------------------------------
 GRANT SELECT ON health.heart_rate_hourly, health.steps_hourly,
     health.calories_hourly, health.azm_hourly,
-    health.sleep_composition, health.daily_metric, health.daily_baseline
+    health.sleep_composition, health.primary_sleep_session,
+    health.daily_metric, health.daily_baseline
     TO health_ro;
 
 RESET ROLE;
