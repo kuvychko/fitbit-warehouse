@@ -17,62 +17,6 @@
       }
     ]
   },
-  "annotations": {
-    "list": [
-      {
-        "name": "Deep sleep",
-        "enable": true,
-        "iconColor": "#4a3aa7",
-        "datasource": { "type": "postgres", "uid": "health-postgres" },
-        "filter": { "exclude": false, "ids": [2] },
-        "target": {
-          "refId": "Anno",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1)\nSELECT stg.time AS \"time\", stg.time + (stg.seconds || ' seconds')::interval AS \"timeend\", 'deep' AS text\nFROM health.sleep_stage stg, ps\nWHERE stg.time >= ps.start_time AND stg.time < ps.end_time AND NOT stg.is_short AND stg.level = 'deep'\nORDER BY stg.time"
-        }
-      },
-      {
-        "name": "Light sleep",
-        "enable": true,
-        "iconColor": "#2a78d6",
-        "datasource": { "type": "postgres", "uid": "health-postgres" },
-        "filter": { "exclude": false, "ids": [2] },
-        "target": {
-          "refId": "Anno",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1)\nSELECT stg.time AS \"time\", stg.time + (stg.seconds || ' seconds')::interval AS \"timeend\", 'light' AS text\nFROM health.sleep_stage stg, ps\nWHERE stg.time >= ps.start_time AND stg.time < ps.end_time AND NOT stg.is_short AND stg.level = 'light'\nORDER BY stg.time"
-        }
-      },
-      {
-        "name": "REM sleep",
-        "enable": true,
-        "iconColor": "#1baf7a",
-        "datasource": { "type": "postgres", "uid": "health-postgres" },
-        "filter": { "exclude": false, "ids": [2] },
-        "target": {
-          "refId": "Anno",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1)\nSELECT stg.time AS \"time\", stg.time + (stg.seconds || ' seconds')::interval AS \"timeend\", 'rem' AS text\nFROM health.sleep_stage stg, ps\nWHERE stg.time >= ps.start_time AND stg.time < ps.end_time AND NOT stg.is_short AND stg.level = 'rem'\nORDER BY stg.time"
-        }
-      },
-      {
-        "name": "Wake",
-        "enable": true,
-        "iconColor": "#eda100",
-        "datasource": { "type": "postgres", "uid": "health-postgres" },
-        "filter": { "exclude": false, "ids": [2] },
-        "target": {
-          "refId": "Anno",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1)\nSELECT stg.time AS \"time\", stg.time + (stg.seconds || ' seconds')::interval AS \"timeend\", 'wake' AS text\nFROM health.sleep_stage stg, ps\nWHERE stg.time >= ps.start_time AND stg.time < ps.end_time AND NOT stg.is_short AND stg.level = 'wake'\nORDER BY stg.time"
-        }
-      }
-    ]
-  },
   "panels": [
     {
       "id": 1,
@@ -100,26 +44,25 @@
     {
       "id": 2,
       "title": "Last night's sleep",
-      "description": "Heart rate over last night's main sleep session, with sleep stages as colored background bands. \"Last night\" resolves via primary_sleep_session (the longest session per civil day, source-agnostic) — not the source-provided main_sleep flag, which is unset for API-synced nights. Panel is time-scoped to roughly the last 14h (not exact auto-zoom — see design.md D13); widen manually if an unusual night falls outside it.",
-      "type": "timeseries",
+      "description": "Heart rate over last night's main sleep session (± 10min padding), colored per-point by sleep stage. X axis is hours since sleep onset (primary_sleep_session.start_time) rather than wall-clock time, so this panel is locked to the actual sleep episode and can't drift depending on when during the day it's viewed (design.md D13 - Grafana can't set a panel's time range from a query result, and a relative now-Xh override was tried and rejected for exactly that drift). Stage coloring is per-point (xychart pointColor), not background bands - Grafana's native region-annotation overlay only works on a time-domain axis, incompatible with this numeric one.",
+      "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "timeFrom": "13h",
-      "timeShift": "1h",
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
       "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": false },
-          "color": { "mode": "fixed", "fixedColor": "#e34948" }
-        },
+        "defaults": { "custom": { "pointSize": { "fixed": 6 } } },
         "overrides": []
+      },
+      "options": {
+        "series": [
+          { "x": "hours_since_onset", "y": "bpm", "pointColor": { "field": "stage" } }
+        ]
       },
       "targets": [
         {
           "refId": "A",
-          "format": "time_series",
+          "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1)\nSELECT time_bucket('2 minutes', hr.time) AS \"time\", avg(hr.bpm) AS bpm\nFROM health.heart_rate hr, ps\nWHERE hr.time >= ps.start_time AND hr.time < ps.end_time\nGROUP BY 1 ORDER BY 1"
+          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1),\nhr AS (\n  SELECT time_bucket('2 minutes', h.time) AS t, avg(h.bpm) AS bpm\n  FROM health.heart_rate h, ps\n  WHERE h.time >= ps.start_time - interval '10 minutes' AND h.time < ps.end_time + interval '10 minutes'\n  GROUP BY 1\n)\nSELECT\n  EXTRACT(EPOCH FROM (hr.t - ps.start_time)) / 3600.0 AS hours_since_onset,\n  hr.bpm,\n  COALESCE(\n    (SELECT stg.level FROM health.sleep_stage stg\n     WHERE stg.time <= hr.t AND stg.time + (stg.seconds || ' seconds')::interval > hr.t AND NOT stg.is_short\n     ORDER BY stg.time DESC LIMIT 1),\n    'awake'\n  ) AS stage\nFROM hr, ps\nORDER BY 1"
         }
       ]
     },
@@ -291,29 +234,32 @@
     {
       "id": 11,
       "title": "Yesterday's heart rate",
-      "type": "timeseries",
+      "description": "The 24h leading up to last night's bedtime (primary_sleep_session.start_time), not a UTC/civil-day 'yesterday' - anchored to the actual sleep episode for the same drift-free reason as panel 2. X axis is hours before bedtime (negative = earlier).",
+      "type": "xychart",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 8, "w": 16, "x": 0, "y": 25 },
       "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 6, "spanNulls": false },
-          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
-        },
+        "defaults": { "custom": { "pointSize": { "fixed": 4 } }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
         "overrides": []
+      },
+      "options": {
+        "series": [
+          { "x": "hours_before_bedtime", "y": "bpm" }
+        ]
       },
       "targets": [
         {
           "refId": "A",
-          "format": "time_series",
+          "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT time_bucket('5 minutes', time) AS \"time\", avg(bpm) AS bpm\nFROM health.heart_rate\nWHERE time >= (((now() AT TIME ZONE '$timezone')::date - 1)::timestamp AT TIME ZONE '$timezone')\n  AND time <  ((now() AT TIME ZONE '$timezone')::date::timestamp AT TIME ZONE '$timezone')\nGROUP BY 1 ORDER BY 1"
+          "rawSql": "WITH ps AS (SELECT start_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1)\nSELECT\n  EXTRACT(EPOCH FROM (time_bucket('5 minutes', h.time) - ps.start_time)) / 3600.0 AS hours_before_bedtime,\n  avg(h.bpm) AS bpm\nFROM health.heart_rate h, ps\nWHERE h.time >= ps.start_time - interval '24 hours' AND h.time < ps.start_time\nGROUP BY 1 ORDER BY 1"
         }
       ]
     },
     {
       "id": 12,
       "title": "Yesterday's activity",
+      "description": "Still calendar-day 'yesterday' (steps_daily), not bedtime-anchored like the panel above - a stat tile isn't subject to the axis-drift problem, so it wasn't in scope for this fix. Worth reconciling later so both panels mean the same 'yesterday'.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 25 },
@@ -328,12 +274,37 @@
       ]
     },
     {
+      "id": 15,
+      "title": "Today's heart rate",
+      "description": "Since waking up (primary_sleep_session.end_time) - keeps growing through the day as new samples sync in, same live-updating idea as panel 13. X axis is hours since wake.",
+      "type": "xychart",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 33 },
+      "fieldConfig": {
+        "defaults": { "custom": { "pointSize": { "fixed": 4 } }, "color": { "mode": "fixed", "fixedColor": "#2a78d6" } },
+        "overrides": []
+      },
+      "options": {
+        "series": [
+          { "x": "hours_since_wake", "y": "bpm" }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH ps AS (SELECT end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1)\nSELECT\n  EXTRACT(EPOCH FROM (time_bucket('5 minutes', h.time) - ps.end_time)) / 3600.0 AS hours_since_wake,\n  avg(h.bpm) AS bpm\nFROM health.heart_rate h, ps\nWHERE h.time >= ps.end_time\nGROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
       "id": 13,
       "title": "Today's activity so far",
       "description": "Live cumulative steps/AZM since local midnight, from the real-time-enabled hourly aggregates — updates through the day, not just at report time.",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 33 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 33 },
       "fieldConfig": { "defaults": { "unit": "none", "noValue": "No data yet today" }, "overrides": [] },
       "targets": [
         {
@@ -349,7 +320,7 @@
       "title": "Today's weigh-in",
       "type": "stat",
       "datasource": { "type": "postgres", "uid": "health-postgres" },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 33 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 41 },
       "fieldConfig": { "defaults": { "unit": "none", "decimals": 1, "noValue": "Not weighed in yet today" }, "overrides": [] },
       "targets": [
         {
