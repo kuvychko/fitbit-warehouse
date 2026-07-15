@@ -107,8 +107,8 @@
       "type": "text",
       "gridPos": { "h": 3, "w": 6, "x": 18, "y": 10 },
       "options": {
-        "mode": "markdown",
-        "content": "- 🟣 Deep\n- 🔵 Light\n- 🟢 REM\n- 🟠 Wake"
+        "mode": "html",
+        "content": "<div style=\"line-height:1.9\"><span style=\"display:inline-block;width:11px;height:11px;background-color:#4a3aa7;border-radius:2px;margin-right:6px;\"></span>Deep<br/><span style=\"display:inline-block;width:11px;height:11px;background-color:#2a78d6;border-radius:2px;margin-right:6px;\"></span>Light<br/><span style=\"display:inline-block;width:11px;height:11px;background-color:#1baf7a;border-radius:2px;margin-right:6px;\"></span>REM<br/><span style=\"display:inline-block;width:11px;height:11px;background-color:#eda100;border-radius:2px;margin-right:6px;\"></span>Wake</div>"
       }
     },
     {
