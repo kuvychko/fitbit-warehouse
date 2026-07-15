@@ -50,15 +50,26 @@
       "gridPos": { "h": 7, "w": 24, "x": 0, "y": 4 },
       "fieldConfig": {
         "defaults": { "custom": { "pointSize": { "fixed": 6 }, "show": "points+lines", "lineWidth": 1 } },
-        "overrides": []
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "stage_code" }, "properties": [
+            { "id": "color", "value": { "mode": "thresholds" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "#4a3aa7", "value": null },
+              { "color": "#2a78d6", "value": 0.5 },
+              { "color": "#1baf7a", "value": 1.5 },
+              { "color": "#eda100", "value": 2.5 }
+            ] } }
+          ] }
+        ]
       },
       "options": {
         "mapping": "manual",
         "series": [
           {
+            "frame": { "matcher": { "id": "byIndex", "options": 0 } },
             "x": { "matcher": { "id": "byName", "options": "hours_since_onset" } },
             "y": { "matcher": { "id": "byName", "options": "bpm" } },
-            "color": { "matcher": { "id": "byName", "options": "stage" } }
+            "color": { "matcher": { "id": "byName", "options": "stage_code" } }
           }
         ]
       },
@@ -67,7 +78,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1),\nhr AS (\n  SELECT time_bucket('2 minutes', h.time) AS t, avg(h.bpm) AS bpm\n  FROM health.heart_rate h, ps\n  WHERE h.time >= ps.start_time - interval '10 minutes' AND h.time < ps.end_time + interval '10 minutes'\n  GROUP BY 1\n)\nSELECT\n  EXTRACT(EPOCH FROM (hr.t - ps.start_time)) / 3600.0 AS hours_since_onset,\n  hr.bpm,\n  COALESCE(\n    (SELECT stg.level FROM health.sleep_stage stg\n     WHERE stg.time <= hr.t AND stg.time + (stg.seconds || ' seconds')::interval > hr.t AND NOT stg.is_short\n     ORDER BY stg.time DESC LIMIT 1),\n    'awake'\n  ) AS stage\nFROM hr, ps\nORDER BY 1"
+          "rawSql": "WITH ps AS (SELECT start_time, end_time FROM health.primary_sleep_session ORDER BY day DESC LIMIT 1),\nhr AS (\n  SELECT time_bucket('2 minutes', h.time) AS t, avg(h.bpm) AS bpm\n  FROM health.heart_rate h, ps\n  WHERE h.time >= ps.start_time - interval '10 minutes' AND h.time < ps.end_time + interval '10 minutes'\n  GROUP BY 1\n)\nSELECT\n  EXTRACT(EPOCH FROM (hr.t - ps.start_time)) / 3600.0 AS hours_since_onset,\n  hr.bpm,\n  COALESCE(\n    (SELECT CASE stg.level WHEN 'deep' THEN 0 WHEN 'light' THEN 1 WHEN 'rem' THEN 2 WHEN 'wake' THEN 3 ELSE 3 END\n     FROM health.sleep_stage stg\n     WHERE stg.time <= hr.t AND stg.time + (stg.seconds || ' seconds')::interval > hr.t AND NOT stg.is_short\n     ORDER BY stg.time DESC LIMIT 1),\n    3\n  ) AS stage_code\nFROM hr, ps\nORDER BY 1"
         }
       ]
     },
@@ -272,6 +283,7 @@
         "mapping": "manual",
         "series": [
           {
+            "frame": { "matcher": { "id": "byIndex", "options": 0 } },
             "x": { "matcher": { "id": "byName", "options": "hours_before_bedtime" } },
             "y": { "matcher": { "id": "byName", "options": "bpm" } }
           }
@@ -318,6 +330,7 @@
         "mapping": "manual",
         "series": [
           {
+            "frame": { "matcher": { "id": "byIndex", "options": 0 } },
             "x": { "matcher": { "id": "byName", "options": "hours_since_wake" } },
             "y": { "matcher": { "id": "byName", "options": "bpm" } }
           }
