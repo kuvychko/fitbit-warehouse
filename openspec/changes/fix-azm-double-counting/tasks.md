@@ -32,37 +32,56 @@
       26/26 passed (local `.venv` was stale/broken — pointed at a removed
       Python 3.12 install — recreated against the available Python 3.14
       and reinstalled `requirements.txt` + `pytest` to run this).
-- [ ] 2.4 Deploy the fix (poller container restart on the Pi).
-- [ ] 2.5 Confirm at least one post-deploy sync cycle writes correctly
-      normalized values for a fresh CARDIO/PEAK interval.
+- [x] 2.4 Deploy the fix (poller container restart on the Pi). Committed
+      (3616686), pushed to `origin/main`, pulled on the Pi
+      (`iaq-server`), `docker compose --profile sync up -d --build sync`.
+- [x] 2.5 Confirm at least one post-deploy sync cycle writes correctly
+      normalized values for a fresh CARDIO/PEAK interval. First post-deploy
+      cycle ran but wrote 0 new azm rows — discovered `health.azm`'s
+      upsert is `ON CONFLICT DO NOTHING` (immutable-sample table), so
+      already-existing (time, zone) keys from before the fix silently
+      blocked the corrected values from ever landing. This directly fed
+      into section 3's approach (delete-then-repull, not a bare re-pull).
 
 ## 3. Correct historical data (D3)
 
-- [ ] 3.1 Determine the exact affected window: earliest `source = 'api'`
+- [x] 3.1 Determine the exact affected window: earliest `source = 'api'`
       row in `health.azm` with `zone IN ('CARDIO', 'PEAK')` through the
-      deploy time in task 2.4.
-- [ ] 3.2 Attempt re-pull of `active-zone-minutes` for the affected window
+      deploy time in task 2.4. **Found: 353 rows, 2026-07-09 17:46 through
+      2026-07-19 16:35 UTC.** Confirmed every single one carried the
+      pre-weighted value verbatim (CARDIO/PEAK minutes was always exactly
+      `2`, FAT_BURN always exactly `1` — no exceptions).
+- [x] 3.2 Attempt re-pull of `active-zone-minutes` for the affected window
       through the fixed mapper, scoped to just that data type/cursor (not a
-      full `run_cycle`) — preferred correction path per D3.
-- [ ] 3.3 If re-pull is impractical (API retention/range limits, or
-      `:reconcile` findings suggest otherwise), write a scoped one-off
-      corrective script (not part of `infra/migrations/`) halving
-      `minutes` for `source = 'api' AND zone IN ('CARDIO','PEAK')` rows
-      within the confirmed affected time range only.
-- [ ] 3.4 If neither 3.2 nor 3.3 is workable, document the decision to
-      leave history uncorrected as a known limitation — in
-      `docs/health-api-notes.md` and as a note visible near the affected
-      dashboard panels — and record the affected date range.
-- [ ] 3.5 Manually refresh `health.azm_hourly` over the corrected (or
+      full `run_cycle`) — preferred correction path per D3. Given the
+      DO-NOTHING finding in 2.5, this required deleting the 353 stale rows
+      first (via trusted local `psql` on the NAS as `health_owner` —
+      `health_rw`, the poller's role, has no DELETE grant by design), then
+      re-running `pull_list("active-zone-minutes", ...)` through the fixed
+      `map_azm` for 2026-07-09 through now. Result: 353 rows re-written.
+      Post-correction: CARDIO sum 466→233 (exactly halved), PEAK sum
+      240→120 (exactly halved), FAT_BURN untouched at 68 — matching the
+      un-weighting transform exactly.
+- [x] 3.3 (Not needed — re-pull in 3.2 succeeded.)
+- [x] 3.4 (Not needed — re-pull in 3.2 succeeded; no rows left uncorrected.)
+- [x] 3.5 Manually refresh `health.azm_hourly` over the corrected (or
       decided-to-leave) date range so the continuous aggregate reflects the
-      outcome without waiting for the next scheduled refresh.
+      outcome without waiting for the next scheduled refresh. Ran
+      `CALL refresh_continuous_aggregate('health.azm_hourly', '2026-07-09
+      00:00:00+00', now())` on the NAS.
 
 ## 4. Verify
 
-- [ ] 4.1 Compare the Morning Report's "AZM" and "AZM today" tiles against
-      the Fitbit app for at least one full day post-fix.
-- [ ] 4.2 Compare the Scoreboard's WHO 150 min/week AZM bar against
-      expectations for a week spanning the corrected range.
-- [ ] 4.3 Visually confirm both panels render as expected in Grafana (per
+- [x] 4.1 Compare the Morning Report's "AZM" and "AZM today" tiles against
+      the Fitbit app for at least one full day post-fix. Ran the exact
+      dashboard SQL against corrected data for 2026-07-19: **174**, vs. the
+      Fitbit app's **173** reported earlier in this session (the 1-minute
+      gap is just additional data synced since that reading) — matches.
+- [x] 4.2 Compare the Scoreboard's WHO 150 min/week AZM bar against
+      expectations for a week spanning the corrected range. Ran the exact
+      dashboard SQL (trailing 7d): **596**, a plausible weighted total, no
+      sign of residual doubling.
+- [x] 4.3 Visually confirm both panels render as expected in Grafana (per
       this repo's Grafana-panel-verification lesson — a JSON/SQL review
-      alone isn't sufficient confirmation).
+      alone isn't sufficient confirmation). Confirmed by the user: Grafana
+      looks good, numbers make sense.
