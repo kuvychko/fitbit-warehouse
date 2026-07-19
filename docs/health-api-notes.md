@@ -107,6 +107,54 @@ unless marked *open*. Sample values are synthesized.
   --bootstrap-steps-daily` (Fitbit era); Basis 2015 days derived by the
   backfill from Basis intraday.
 
+## Active Zone Minutes — pre-weighted values (2026-07-19 spike, verified live)
+
+Spiked as part of `fix-azm-double-counting`, prompted by a live discrepancy:
+the Fitbit app showed 173 AZM for a day, the warehouse showed 338.
+
+- **`activeZoneMinutes.activeZoneMinutes` is already the officially-weighted
+  score, not raw clock-minutes in zone.** A 1-minute `FAT_BURN` interval
+  reports value `"1"`; a 1-minute `CARDIO` interval reports value `"2"`.
+  Verified across a live sample (18 FAT_BURN + 83 CARDIO points, all exactly
+  1-minute intervals): value/duration ratio is exactly 1.0 for FAT_BURN and
+  exactly 2.0 for CARDIO, no exceptions. Sample shape (values synthesized):
+
+```json
+{"dataSource": {"recordingMethod": "PASSIVELY_MEASURED",
+                 "device": {"displayName": "Charge 6"}, "platform": "FITBIT"},
+ "activeZoneMinutes": {
+   "interval": {"startTime": "2026-01-01T09:36:00Z",
+                "startUtcOffset": "-25200s",
+                "endTime": "2026-01-01T09:37:00Z",
+                "endUtcOffset": "-25200s",
+                "civilStartTime": {"date": {...}, "time": {"hours": 9, "minutes": 36}},
+                "civilEndTime": {"date": {...}, "time": {"hours": 9, "minutes": 37}}},
+   "heartRateZone": "CARDIO",
+   "activeZoneMinutes": "2"}}
+```
+
+- **No separate raw-minutes or multiplier field exists.** The
+  `activeZoneMinutes` object's only keys are `interval`, `heartRateZone`,
+  `activeZoneMinutes` — unlike the classic Fitbit Web API's intraday AZM
+  response, which carried both a weighted total and a
+  `minutesInHeartRateZones[].minuteMultiplier`. There's nothing to read
+  raw minutes from directly; un-weighting requires dividing by the known
+  per-zone multiplier (FAT_BURN ÷ 1, CARDIO/PEAK ÷ 2) using the same
+  hardcoded zone-name mapping the Grafana dashboards already use.
+- **`:reconcile` uses the identical value convention** — `GET
+  /users/me/dataTypes/active-zone-minutes/dataPoints:reconcile` with the
+  same AIP-160 filter returns the same pre-weighted
+  `activeZoneMinutes`/`heartRateZone`/`interval` shape as `:dataPoints`
+  (list). It's a viable alternative source for a historical re-pull (its
+  revision/tombstone semantics were the original motivation for checking
+  it) but doesn't offer a raw-minutes shortcut — the un-weighting still
+  has to happen in the mapper either way.
+- **Root cause of the bug**: `sync/poller.py`'s `map_azm()` stored this
+  field verbatim into `health.azm.minutes`, which every other producer
+  (Takeout CSV backfill) and consumer (dashboard `* 2` CARDIO/PEAK
+  weighting) treats as raw. Fixed by dividing CARDIO/PEAK values by 2 in
+  the mapper before storing.
+
 ## Open items / risks
 
 - **Resolved 2026-07-19**: the Testing-mode 7-day refresh-token expiry (docs)

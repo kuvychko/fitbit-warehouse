@@ -183,10 +183,20 @@ def map_body_fat(p):
     yield ("body_fat", (ts(b["sampleTime"]["physicalTime"]), float(b["percentage"]),
                         SOURCE, device_of(p), opt_offset(b["sampleTime"].get("utcOffset"))))
 
+# Google Health API's activeZoneMinutes value is already the officially
+# weighted AZM score (a 1-minute CARDIO interval reports "2", not "1"), with
+# no raw-minutes or multiplier field alongside it (verified live, see
+# docs/health-api-notes.md). health.azm.minutes must stay raw regardless of
+# source — the Grafana dashboards apply this same CARDIO/PEAK weighting
+# themselves — so divide it back out here before storing.
+_AZM_WEIGHT = {"FAT_BURN": 1, "CARDIO": 2, "PEAK": 2}
+
 def map_azm(p):
     a = p["activeZoneMinutes"]
-    yield ("azm", (ts(a["interval"]["startTime"]), a["heartRateZone"],
-                   int(a["activeZoneMinutes"]), SOURCE, device_of(p),
+    zone = a["heartRateZone"]
+    raw_minutes = int(a["activeZoneMinutes"]) // _AZM_WEIGHT[zone]
+    yield ("azm", (ts(a["interval"]["startTime"]), zone,
+                   raw_minutes, SOURCE, device_of(p),
                    opt_offset(a["interval"].get("startUtcOffset"))))
 
 _STAGE = {"AWAKE": "wake", "LIGHT": "light", "DEEP": "deep", "REM": "rem",
