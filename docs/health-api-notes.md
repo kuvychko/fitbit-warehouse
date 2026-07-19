@@ -5,9 +5,13 @@ unless marked *open*. Sample values are synthesized.
 
 ## Auth (verified)
 
-- Google Cloud project + **Google Health API** enabled; OAuth consent in
-  **Testing** mode (External), self added as test user. All Health scopes are
-  **Restricted**, but testing mode needs no verification review.
+- Google Cloud project + **Google Health API** enabled; OAuth consent
+  publishing status is **In production** (External), unverified. All Health
+  scopes are **Restricted**, but the unverified-production path works fine
+  for a personal-use client — no verification review was required, and the
+  consent screen completes normally for the account that owns the project
+  (see "Open items / risks" below; this started out in Testing mode and was
+  flipped after the 7-day refresh-token expiry below was hit for real).
 - **Desktop app** OAuth client works with a loopback redirect
   (`http://localhost:8765/`) — the docs suggest a web client + google.com
   redirect, but desktop/loopback is smoother for a CLI and was accepted.
@@ -105,14 +109,22 @@ unless marked *open*. Sample values are synthesized.
 
 ## Open items / risks
 
-- **Testing-mode refresh tokens expire after 7 days** (docs). Ours was minted
-  2026-07-12 — if `--probe-only` fails after ~2026-07-19, that's why. Planned
-  escape hatch: flip the app to **In production without verification** — the
-  rate-limit docs define quota for "unverified apps", implying they work
-  (one-time scary interstitial). Verify before building the poller's
-  scheduling; fallback is periodic Takeout re-exports.
-- Restricted-scope verification is only a concern if the app ever needs >100
-  users or Google tightens unverified-app policy — irrelevant for personal use
-  unless the escape hatch fails.
+- **Resolved 2026-07-19**: the Testing-mode 7-day refresh-token expiry (docs)
+  hit for real — the token minted 2026-07-12 died on schedule and the poller's
+  cycles started failing with `invalid_grant: Token has been expired or
+  revoked.` Flipped the OAuth consent screen to **In production without
+  verification**: the browser consent flow completes normally (one-time
+  "Google hasn't verified this app" interstitial, click through Advanced),
+  and the non-interactive refresh exchange has worked since. No verification
+  review was triggered — confirms the escape hatch works for a
+  personal-use/single-account client even with Restricted scopes. Production
+  refresh tokens don't carry the 7-day cap, so this shouldn't recur; if it
+  does, re-run `python -m sync.authorize` interactively (needs a browser, so
+  run it locally and copy the resulting `secrets/google_token.json` to the
+  Pi — see infra notes) and check the publishing status hasn't silently
+  reverted.
+- Restricted-scope verification is still only a concern if the app ever needs
+  >100 users or Google tightens unverified-app policy for production apps —
+  hasn't happened here.
 - `:reconcile` semantics (revisions/tombstones?) unexplored; could make the
   catch-up window cheaper and catch late edits.
