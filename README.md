@@ -18,6 +18,69 @@ data lives in *your* database, queryable with real SQL and dashboarded with Graf
   built on InfluxDB. A PostgreSQL/TimescaleDB schema means joins, window functions,
   and integration with everything else that speaks Postgres.
 
+## Quickstart (standalone mode)
+
+Standalone mode bundles TimescaleDB + Grafana in Docker — no shared cluster
+needed. You'll need Docker and Python 3.10+.
+
+1. **Clone and configure:**
+   ```
+   git clone https://github.com/<you>/fitbit-warehouse.git
+   cd fitbit-warehouse
+   cp .env.example .env
+   ```
+   Edit `.env`: set `POSTGRES_SUPER_PW`, `HEALTH_OWNER_PW`, `HEALTH_RW_PW`,
+   `HEALTH_RO_PW`, and `GRAFANA_ADMIN_PW` to your own values (anything
+   sufficiently random — these stay local to your containers). Leave
+   `PG_HOST=db` and the standalone profile handles the rest.
+
+2. **Start the database + Grafana, then apply migrations:**
+   ```
+   docker compose --profile standalone up -d
+   docker compose run --rm migrate
+   ```
+   Migrations are idempotent — safe to re-run any time (e.g. after pulling
+   an update). Grafana is now live at `http://localhost:3000`
+   (`admin` / your `GRAFANA_ADMIN_PW`) with the `health` datasource and all
+   four dashboards provisioned, just empty until data lands.
+
+3. **Backfill your history:**
+   [Request your Google Takeout Fitbit export](https://support.google.com/fitbit/answer/14236615)
+   (pick "Google Health" data; generation can take hours) and extract it. Then:
+   ```
+   python -m venv .venv && .venv/Scripts/activate   # Windows; use bin/activate on Linux/macOS
+   pip install -r requirements.txt
+   ```
+   Set `TAKEOUT_DIR`, `TAKEOUT_TZ` (your Fitbit profile's IANA timezone), and
+   `TAKEOUT_WEIGHT_UNIT` in `.env` to match your export, then run:
+   ```
+   python -m backfill
+   ```
+   It's idempotent — re-running (e.g. after adding a later Takeout export)
+   only ever upserts, never duplicates. See `docs/takeout-format.md` for what
+   each stream maps to.
+
+4. **Keep it current with the sync poller (optional but recommended):**
+   Create a Google Cloud project + OAuth 2.0 **Desktop app** client for the
+   Google Health API, then authorize once:
+   ```
+   python -m sync.authorize
+   ```
+   This opens a browser for consent and stores a refresh token at
+   `GOOGLE_TOKEN_PATH`. Set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in
+   `.env`, then either run `python -m sync.poller` directly or containerize it:
+   ```
+   docker compose --profile sync up -d --build sync
+   ```
+   **Use "In production" publishing status on the OAuth consent screen, not
+   Testing** — Testing-mode refresh tokens silently expire after 7 days and
+   the poller's cycles start failing; production (even unverified, for a
+   personal-use client) doesn't have that cap. See
+   `docs/health-api-notes.md` for the full spike writeup.
+
+Steps 3 and 4 are independent and can run in either order — the backfill/sync
+seam is idempotent by design.
+
 ## How it works
 
 ```
@@ -74,7 +137,8 @@ instance should confirm its version.
 ## Requirements
 
 - A Fitbit account (migrated to Google sign-in)
-- A Google Cloud project with an OAuth client (personal/testing mode is fine)
+- A Google Cloud project with an OAuth client (personal use is fine; use "In
+  production" publishing status, not Testing — see Quickstart step 4)
 - Docker; a TimescaleDB instance with the `timescaledb_toolkit` extension
   available (compose file included for standalone use — it pulls
   `timescale/timescaledb-ha`, which ships the extension; a shared/self-managed

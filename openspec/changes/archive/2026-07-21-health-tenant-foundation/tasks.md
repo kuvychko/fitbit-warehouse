@@ -77,5 +77,16 @@
 - [x] 4.2 Verify seam: panels continuous across the boundary date; datasource
       role cannot INSERT — verified 2026-07-12: zero >30min gaps across the
       takeout→api boundary on warehouse-db; INSERT via Pi Grafana denied
-- [ ] 4.3 README pass: quickstart proven from a fresh clone (standalone mode),
-      screenshots reviewed for personal-data leakage before commit
+- [x] 4.3 README pass: quickstart proven from a fresh clone (standalone mode),
+      screenshots reviewed for personal-data leakage before commit — done
+      2026-07-21: added a Quickstart section to README.md, verified live
+      end-to-end against a true fresh clone in an isolated Docker Compose
+      project (separate name/ports/volumes, no collision with real data) —
+      `--profile standalone up -d` → `run --rm migrate` (idempotent re-run
+      confirmed) → Grafana datasource health check OK → all 4 dashboards
+      provisioned; also tightened the Requirements section's OAuth guidance
+      to match the Testing-mode 7-day-expiry finding in
+      `docs/health-api-notes.md`. Screenshots deferred by user decision (no
+      live Grafana with real data available this session, and redaction
+      judgment on personal health data shouldn't happen unattended) — open
+      as a follow-up whenever convenient.
