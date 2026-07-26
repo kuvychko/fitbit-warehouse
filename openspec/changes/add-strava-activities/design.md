@@ -363,6 +363,23 @@ the identical treatment — this repo's migration cannot safely
    a `MATERIALIZED VIEW` with a periodic `REFRESH` is a mechanical,
    isolated follow-up — the view's column shape doesn't change.
 
+   **Deployment finding (realized risk):** a plain view over a `GROUP BY
+   activity_id` does **not** let Postgres push a dashboard's outer
+   `start_time` window predicate into the aggregation — so
+   `... JOIN strava_activity_hr USING (activity_id) WHERE a.start_time >= …`
+   computes HR stats for *every* activity (one `heart_rate` range scan each),
+   which at 337 activities over the 39.8M-row production `heart_rate` table
+   exceeds Grafana's query timeout, and the HR/recent-runs panels render "No
+   data". The `health-dashboards` requirement is "a query-time join over each
+   activity's elapsed window" — the *view* is one way to express that, not
+   the only one. The Running dashboard therefore uses an inline
+   `LEFT JOIN LATERAL` against `health.heart_rate` that filters activities to
+   the window *first* (a handful of rows) and correlates only those — same
+   elapsed-window semantics, but fast. `strava_activity_hr` is retained for
+   ad-hoc single-/small-set lookups (an `activity_id =` equality *does* push
+   down), with the materialized-view escape hatch above if an all-activities
+   consumer ever appears.
+
    No per-device filtering in the view: unlike `steps`/`distance`/etc.,
    where the `health-dashboards` spec requires per-device dedup before
    summing (concurrent wearable+phone streams double-count a sum),

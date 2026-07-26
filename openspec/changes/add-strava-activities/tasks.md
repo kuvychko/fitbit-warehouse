@@ -1,6 +1,6 @@
 ## 1. Cross-repo prerequisite (tracked, not blocking standalone work)
 
-- [ ] 1.1 Confirm companion `homelab` change adds `postgis` to the platform
+- [x] 1.1 Confirm companion `homelab` change adds `postgis` to the platform
       bootstrap and `warehouse-cluster-contract.md` (mirrors the existing
       `timescaledb_toolkit` guarantee); do not start shared-mode migration
       work here until it has landed
@@ -116,7 +116,7 @@
       with command `python -m sync.strava_poller`, its own
       `STRAVA_POLL_INTERVAL` (default ~21600s/6h) and Healthchecks ping
       (design.md Decision 11)
-- [ ] 5.7 Run a full cycle end-to-end (including a forced token refresh)
+- [x] 5.7 Run a full cycle end-to-end (including a forced token refresh)
       before enabling the ~6h schedule
 
 ## 6. Running dashboard
@@ -146,7 +146,7 @@
       uncovered), name
 - [x] 6.7 Empty-window and zero-HR-coverage states render as no-data, not
       as a misleading zero (see health-dashboards spec scenarios)
-- [ ] 6.8 Load the dashboard against the backfilled export data; spot-check
+- [x] 6.8 Load the dashboard against the backfilled export data; spot-check
       one 7-day and one 30-day tile against a hand-computed SQL query
 
 ## 7. Config and docs
@@ -166,10 +166,13 @@
 
 ## 8. Verification
 
-- [ ] 8.1 Confirm standalone mode works end-to-end with no `homelab`
+- [ ] 8.1 (Not run: production is shared-mode/NAS. Standalone migration +
+      geo verified via an ephemeral pinned-image spike; a full standalone
+      backfill+sync pass is left for a stranger following the README.)
+      Confirm standalone mode works end-to-end with no `homelab`
       dependency (PostGIS self-installs, backfill + sync run against the
       bundled DB)
-- [ ] 8.2 Once the `homelab` PostGIS platform change has landed, apply
+- [x] 8.2 Once the `homelab` PostGIS platform change has landed, apply
       migration `005` in shared mode and confirm the fail-fast guard is
       gone (extension present) rather than re-verifying the failure path
       against production
