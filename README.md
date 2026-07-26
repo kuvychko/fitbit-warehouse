@@ -87,7 +87,10 @@ needed. You'll need Docker and Python 3.10+.
    python -m backfill --strava-dir ./data/strava
    ```
    For ongoing sync, create a Strava API application (Strava → Settings → *API*),
-   authorize once, and run the poller:
+   authorize once, and run the poller. Note: the bulk export above is free for
+   any Strava account, but the Strava API requires a **paid Strava
+   subscription** — free accounts cannot create an API application or
+   authorize a poller:
    ```
    python -m sync.strava_authorize
    docker compose --profile strava-sync up -d --build strava-sync
