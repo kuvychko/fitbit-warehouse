@@ -67,7 +67,7 @@
         "defaults": { "unit": "string", "color": { "mode": "fixed", "fixedColor": "#7d54c9" } },
         "overrides": []
       },
-      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false } },
       "targets": [
         {
           "refId": "A",
@@ -88,7 +88,7 @@
         "defaults": { "unit": "string", "color": { "mode": "fixed", "fixedColor": "#c0392b" } },
         "overrides": []
       },
-      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false } },
       "targets": [
         {
           "refId": "A",
@@ -129,7 +129,7 @@
         "defaults": { "unit": "string", "color": { "mode": "fixed", "fixedColor": "#7d54c9" } },
         "overrides": []
       },
-      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false } },
       "targets": [
         {
           "refId": "A",
@@ -150,7 +150,7 @@
         "defaults": { "unit": "string", "color": { "mode": "fixed", "fixedColor": "#c0392b" } },
         "overrides": []
       },
-      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "options": { "colorMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/.*/", "values": false } },
       "targets": [
         {
           "refId": "A",
