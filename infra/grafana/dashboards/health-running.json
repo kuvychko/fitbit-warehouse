@@ -1,0 +1,198 @@
+{
+  "uid": "health-running",
+  "title": "Running (Strava)",
+  "tags": ["health", "fitbit-warehouse", "strava"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": { "from": "now-16w", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "timezone",
+        "label": "Day/week-boundary timezone",
+        "type": "textbox",
+        "query": "America/Los_Angeles",
+        "current": { "text": "America/Los_Angeles", "value": "America/Los_Angeles" }
+      },
+      {
+        "name": "unit_system",
+        "label": "Units",
+        "type": "custom",
+        "query": "imperial,metric",
+        "current": { "text": "imperial", "value": "imperial" },
+        "options": [
+          { "text": "imperial", "value": "imperial", "selected": true },
+          { "text": "metric", "value": "metric", "selected": false }
+        ]
+      },
+      {
+        "name": "activity_types",
+        "label": "Activity types (match STRAVA_ACTIVITY_TYPES)",
+        "type": "textbox",
+        "query": "Run,Hike",
+        "current": { "text": "Run,Hike", "value": "Run,Hike" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Distance — last 7 days",
+      "description": "Total distance of allowlisted activities ($activity_types) started in the trailing 7 days. Miles when $unit_system=imperial, km when metric. No activity → no-data, not zero.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "#3d71d9" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round((sum(distance_m) / (CASE WHEN '$unit_system' = 'metric' THEN 1000.0 ELSE 1609.344 END))::numeric, 1) AS \"distance\"\nFROM health.strava_activity\nWHERE activity_type = ANY (string_to_array('$activity_types', ','))\n  AND start_time >= now() - interval '7 days'"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Avg pace — last 7 days",
+      "description": "Distance-weighted average pace (total moving time ÷ total distance), shown min/mi when $unit_system=imperial, min/km when metric — not the average of each run's own pace.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "#7d54c9" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN sum(distance_m) > 0 THEN to_char(make_interval(secs => round(sum(moving_time_s) / (sum(distance_m) / (CASE WHEN '$unit_system' = 'metric' THEN 1000.0 ELSE 1609.344 END)))::int), 'MI:SS') END AS \"pace\"\nFROM health.strava_activity\nWHERE activity_type = ANY (string_to_array('$activity_types', ','))\n  AND start_time >= now() - interval '7 days'"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Avg heart rate — last 7 days",
+      "description": "Sample-weighted average HR from health.strava_activity_hr (query-time join over each run's ELAPSED window), with a coverage indicator: '142 bpm · 3/5 runs' means only 3 of 5 runs had overlapping heart-rate data. Zero coverage → no-data, never a misleading 0.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "#c0392b" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN sum(h.hr_sample_count) > 0 THEN round(sum(h.hr_bpm_sum) / sum(h.hr_sample_count))::text || ' bpm · ' || count(*) FILTER (WHERE h.hr_sample_count > 0) || '/' || count(*) || ' runs' END AS \"avg HR\"\nFROM health.strava_activity a\nJOIN health.strava_activity_hr h USING (activity_id)\nWHERE a.activity_type = ANY (string_to_array('$activity_types', ','))\n  AND a.start_time >= now() - interval '7 days'"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Distance — last 30 days",
+      "description": "Total distance of allowlisted activities ($activity_types) started in the trailing 30 days, in the selected unit.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "#3d71d9" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round((sum(distance_m) / (CASE WHEN '$unit_system' = 'metric' THEN 1000.0 ELSE 1609.344 END))::numeric, 1) AS \"distance\"\nFROM health.strava_activity\nWHERE activity_type = ANY (string_to_array('$activity_types', ','))\n  AND start_time >= now() - interval '30 days'"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Avg pace — last 30 days",
+      "description": "Distance-weighted average pace over the trailing 30 days, min/mi (imperial) or min/km (metric).",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "#7d54c9" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN sum(distance_m) > 0 THEN to_char(make_interval(secs => round(sum(moving_time_s) / (sum(distance_m) / (CASE WHEN '$unit_system' = 'metric' THEN 1000.0 ELSE 1609.344 END)))::int), 'MI:SS') END AS \"pace\"\nFROM health.strava_activity\nWHERE activity_type = ANY (string_to_array('$activity_types', ','))\n  AND start_time >= now() - interval '30 days'"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Avg heart rate — last 30 days",
+      "description": "Sample-weighted average HR over the trailing 30 days with an 'N/M runs covered' indicator. Zero coverage → no-data.",
+      "type": "stat",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "#c0392b" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN sum(h.hr_sample_count) > 0 THEN round(sum(h.hr_bpm_sum) / sum(h.hr_sample_count))::text || ' bpm · ' || count(*) FILTER (WHERE h.hr_sample_count > 0) || '/' || count(*) || ' runs' END AS \"avg HR\"\nFROM health.strava_activity a\nJOIN health.strava_activity_hr h USING (activity_id)\nWHERE a.activity_type = ANY (string_to_array('$activity_types', ','))\n  AND a.start_time >= now() - interval '30 days'"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Weekly mileage (last 16 weeks)",
+      "description": "One bar per civil week (in $timezone): total distance of allowlisted activities, in the selected unit. Training volume is a time series — this shows the ramp a 7d/30d scalar can't.",
+      "type": "barchart",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "#3d71d9" } },
+        "overrides": []
+      },
+      "options": { "xTickLabelRotation": -45 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('week', (start_time AT TIME ZONE '$timezone')) AS \"time\",\n       round((sum(distance_m) / (CASE WHEN '$unit_system' = 'metric' THEN 1000.0 ELSE 1609.344 END))::numeric, 1) AS \"distance\"\nFROM health.strava_activity\nWHERE activity_type = ANY (string_to_array('$activity_types', ','))\n  AND start_time >= now() - interval '16 weeks'\nGROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Recent runs (last 30 days)",
+      "description": "One row per allowlisted activity. Distance/pace in the selected unit; avg HR blank when no overlapping heart-rate data (Strava activities carry no HR of their own).",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "health-postgres" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 20 },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  to_char(a.start_time AT TIME ZONE '$timezone', 'YYYY-MM-DD HH24:MI') AS \"date\",\n  round((a.distance_m / (CASE WHEN '$unit_system' = 'metric' THEN 1000.0 ELSE 1609.344 END))::numeric, 2) AS \"distance\",\n  CASE WHEN a.distance_m > 0 THEN to_char(make_interval(secs => round(a.moving_time_s / (a.distance_m / (CASE WHEN '$unit_system' = 'metric' THEN 1000.0 ELSE 1609.344 END)))::int), 'MI:SS') END AS \"pace\",\n  round(a.elev_gain_m) AS \"elev gain (m)\",\n  CASE WHEN h.hr_sample_count > 0 THEN round(h.hr_bpm_avg)::text ELSE '' END AS \"avg HR\",\n  a.name AS \"name\"\nFROM health.strava_activity a\nLEFT JOIN health.strava_activity_hr h USING (activity_id)\nWHERE a.activity_type = ANY (string_to_array('$activity_types', ','))\n  AND a.start_time >= now() - interval '30 days'\nORDER BY a.start_time DESC"
+        }
+      ]
+    }
+  ]
+}

@@ -90,6 +90,35 @@ services:
       - ../secrets:/secrets:ro
     restart: unless-stopped
 
+  # Strava API poller (optional). Reuses the sync image with a different
+  # command; needs a one-time interactive OAuth (python -m sync.strava_authorize)
+  # to create secrets/strava_token.json first.
+  #   docker compose --profile strava-sync up -d --build strava-sync
+  strava-sync:
+    build:
+      context: ..
+      dockerfile: infra/sync.Dockerfile
+    profiles: ["strava-sync"]
+    command: ["python", "-u", "-m", "sync.strava_poller"]
+    environment:
+      PG_HOST: ${PG_HOST:-db}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_DB: ${PG_DB:-warehouse}
+      HEALTH_RW_PW: ${HEALTH_RW_PW:-}
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
+      STRAVA_TOKEN_PATH: /secrets/strava_token.json
+      STRAVA_API_BASE: ${STRAVA_API_BASE:-https://www.strava.com/api/v3}
+      STRAVA_ACTIVITY_TYPES: ${STRAVA_ACTIVITY_TYPES:-Run,Hike}
+      STRAVA_POLL_INTERVAL: ${STRAVA_POLL_INTERVAL:-21600}
+      STRAVA_OVERLAP_HOURS: ${STRAVA_OVERLAP_HOURS:-24}
+      HEALTHCHECKS_PING_URL: ${STRAVA_HEALTHCHECKS_PING_URL:-}
+    volumes:
+      # READ-WRITE (not :ro like the Google sync): Strava rotates the refresh
+      # token on every refresh, so the poller must rewrite the token file.
+      - ../secrets:/secrets
+    restart: unless-stopped
+
   # Bundled Grafana for standalone mode. Shared-cluster users typically point
   # an existing Grafana at the same provisioning files instead.
   grafana:

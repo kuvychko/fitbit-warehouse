@@ -20,6 +20,10 @@ class TableSpec:
     cols: tuple[str, ...]    # insert column order; parsers yield tuples in this order
     key: tuple[str, ...]     # natural-key (conflict) columns
     action: str              # 'nothing' (immutable samples) | 'update' (revisable summaries)
+    time_col: str | None = None  # column for MIN/MAX + sync catch-up cursor;
+                                 # None -> key[0] (true for every time-grain table).
+                                 # Strava tables key on activity_id, so they set
+                                 # it explicitly (see backfill.db.time_col).
 
 
 TABLES: dict[str, TableSpec] = {
@@ -60,12 +64,35 @@ TABLES: dict[str, TableSpec] = {
         TableSpec("hrv_daily", ("day", "rmssd_ms", "nremhr_bpm", "entropy", "source"), ("day",), "update"),
         TableSpec("weight", ("time", "weight_kg", "bmi", "source", "device", "utc_offset_s"), ("time",), "update"),
         TableSpec("body_fat", ("time", "fat_pct", "source", "device", "utc_offset_s"), ("time",), "update"),
+        # Strava (openspec change: add-strava-activities). First tables whose
+        # natural key does NOT start with a time column, hence explicit time_col.
+        # strava_activity: plain table (not a hypertable), keyed on the Strava
+        # activity ID; action 'update' so edits/renames propagate. utc_offset_s
+        # / elev_loss_m are populated by backfill (CSV) but not the API summary,
+        # so the COALESCE upsert must never null them back out.
+        TableSpec(
+            "strava_activity",
+            ("activity_id", "start_time", "utc_offset_s", "activity_type", "name",
+             "distance_m", "moving_time_s", "elapsed_time_s", "elev_gain_m",
+             "elev_loss_m", "source"),
+            ("activity_id",), "update", time_col="start_time",
+        ),
+        # activity_track: hypertable of GPS fixes; immutable samples. geog is a
+        # generated column (not inserted). time = start_time + point offset,
+        # derived identically in backfill and sync so overlap dedups.
+        TableSpec(
+            "activity_track",
+            ("activity_id", "time", "lat", "lon", "elevation_m", "source"),
+            ("activity_id", "time"), "nothing", time_col="time",
+        ),
     ]
 }
 
-# Column used for the MIN/MAX verification report (== first key column).
+# Column used for the MIN/MAX verification report and the sync catch-up cursor.
+# Defaults to the first key column (a time grain for every original table);
+# tables whose natural key isn't time-first set spec.time_col explicitly.
 def time_col(spec: TableSpec) -> str:
-    return spec.key[0]
+    return spec.time_col or spec.key[0]
 
 
 def connect() -> psycopg.Connection:

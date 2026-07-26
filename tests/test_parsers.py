@@ -204,10 +204,12 @@ def test_classify_unknown_reported(tmp_path):
 
 
 def test_all_load_tables_exist_in_registry():
-    # every table parsers can emit must be in db.TABLES
+    # every table parsers can emit must be in db.TABLES (and vice versa)
     emitted = {"heart_rate", "steps", "calories", "distance", "floors", "spo2",
                "hrv", "device_temperature", "azm", "sleep_session", "sleep_stage",
                "sleep_score", "breathing_rate", "nightly_temperature",
                "resting_heart_rate", "active_minutes_daily", "hrv_daily",
-               "weight", "body_fat", "steps_daily"}
+               "weight", "body_fat", "steps_daily",
+               # emitted by backfill/strava.py + sync/strava_poller.py
+               "strava_activity", "activity_track"}
     assert emitted == set(db.TABLES)

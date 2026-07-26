@@ -17,15 +17,16 @@ from collections import Counter
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import db, fitbit, googlefit
+from . import db, fitbit, googlefit, strava
 
 
 class Ctx:
     """Shared parser context (timezone, units, cross-file accumulators)."""
 
-    def __init__(self, tz: str, weight_unit: str):
+    def __init__(self, tz: str, weight_unit: str, strava_types: set[str] | None = None):
         self.tz = ZoneInfo(tz)
         self.weight_unit = weight_unit
+        self.strava_types = strava_types or set()
         self.active_minutes: dict = {}
         self.basis_daily_steps: dict = {}
 
@@ -90,25 +91,37 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="backfill", description=__doc__)
     ap.add_argument("--takeout-dir", default=os.environ.get("TAKEOUT_DIR"))
     ap.add_argument("--googlefit-dir", default=os.environ.get("GOOGLEFIT_DIR"))
-    # No default on purpose: several streams carry naive local timestamps, and
-    # silently assuming UTC corrupts them by the UTC offset (learned the hard
-    # way). The loader refuses to guess.
+    ap.add_argument("--strava-dir", default=os.environ.get("STRAVA_EXPORT_DIR"),
+                    help="extracted Strava bulk export (contains activities.csv "
+                         "and activities/*.gpx); optional, independent of the "
+                         "Fitbit flow")
+    # No default on purpose: several Fitbit streams carry naive local timestamps,
+    # and silently assuming UTC corrupts them by the UTC offset (learned the hard
+    # way). The loader refuses to guess. Strava data is all UTC, so a Strava-only
+    # run does not need --tz.
     ap.add_argument("--tz", default=os.environ.get("TAKEOUT_TZ"))
     ap.add_argument("--weight-unit", default=os.environ.get("TAKEOUT_WEIGHT_UNIT", "lbs"),
                     choices=("lbs", "kg"))
+    ap.add_argument("--strava-types",
+                    default=os.environ.get("STRAVA_ACTIVITY_TYPES", "Run,Hike"),
+                    help="comma-separated coarse Strava activity types to import "
+                         "(default: Run,Hike)")
     ap.add_argument("--only", help="comma-separated stream names (default: all)")
     ap.add_argument("--dry-run", action="store_true", help="parse and report, no DB writes")
     ap.add_argument("--verbose", action="store_true", help="list every skipped file")
     args = ap.parse_args()
 
-    if not args.takeout_dir and not args.googlefit_dir:
-        ap.error("set --takeout-dir/TAKEOUT_DIR (and/or --googlefit-dir/GOOGLEFIT_DIR)")
-    if not args.tz:
+    if not args.takeout_dir and not args.googlefit_dir and not args.strava_dir:
+        ap.error("set at least one source: --takeout-dir/TAKEOUT_DIR, "
+                 "--googlefit-dir/GOOGLEFIT_DIR, or --strava-dir/STRAVA_EXPORT_DIR")
+    if (args.takeout_dir or args.googlefit_dir) and not args.tz:
         ap.error("set --tz or TAKEOUT_TZ (IANA zone your Fitbit profile used, "
-                 "e.g. America/Los_Angeles) — required to convert the export's "
-                 "naive local timestamps; see docs/takeout-format.md")
+                 "e.g. America/Los_Angeles) — required to convert the Fitbit "
+                 "export's naive local timestamps; see docs/takeout-format.md")
 
-    ctx = Ctx(args.tz, args.weight_unit)
+    strava_types = {t.strip() for t in args.strava_types.split(",") if t.strip()}
+    # Strava data is UTC; a Strava-only run needs no real zone, so default to UTC.
+    ctx = Ctx(args.tz or "UTC", args.weight_unit, strava_types=strava_types)
     only = set(args.only.split(",")) if args.only else None
     errors: list[str] = []
 
@@ -125,6 +138,9 @@ def main() -> int:
     if args.googlefit_dir:
         exports.append(("Google Fit export", Path(args.googlefit_dir),
                         googlefit.STREAMS, googlefit.SKIP_PATTERNS))
+    if args.strava_dir:
+        exports.append(("Strava export", Path(args.strava_dir),
+                        strava.STREAMS, strava.SKIP_PATTERNS))
 
     all_skipped, all_unknown = Counter(), []
     for label, root, streams, skip_patterns in exports:

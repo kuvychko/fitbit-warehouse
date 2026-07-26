@@ -78,7 +78,27 @@ needed. You'll need Docker and Python 3.10+.
    personal-use client) doesn't have that cap. See
    `docs/health-api-notes.md` for the full spike writeup.
 
-Steps 3 and 4 are independent and can run in either order — the backfill/sync
+5. **Add Strava running/hiking data (optional):** if you run or hike with
+   Strava, you can load your activity history *and* GPS tracks the same
+   backfill-then-sync way. Request a bulk export (Strava → Settings → *My
+   Account* → "Download or Delete Your Account" → *Get Started* → **Request
+   your archive**), extract it, set `STRAVA_EXPORT_DIR` in `.env`, then:
+   ```
+   python -m backfill --strava-dir ./data/strava
+   ```
+   For ongoing sync, create a Strava API application (Strava → Settings → *API*),
+   authorize once, and run the poller:
+   ```
+   python -m sync.strava_authorize
+   docker compose --profile strava-sync up -d --build strava-sync
+   ```
+   This adds two tables (`strava_activity`, `activity_track`) and needs the
+   **PostGIS** extension — bundled in standalone mode; on a shared cluster the
+   platform must provide it. See `docs/strava-format.md` and
+   `docs/strava-api-notes.md`. Entirely optional — the Fitbit flow never
+   depends on it.
+
+The backfill and sync steps are independent and can run in any order — every
 seam is idempotent by design.
 
 ## How it works
@@ -111,7 +131,7 @@ ongoing                                    │                            │
 
 ## Dashboards
 
-Four dashboards are provisioned out of the box (Grafana → folder **Health**):
+Five dashboards are provisioned out of the box (Grafana → folder **Health**):
 
 - **Health Overview** — the original at-a-glance view: heart rate, resting HR,
   steps, sleep, HRV over the last 90 days.
@@ -126,6 +146,12 @@ Four dashboards are provisioned out of the box (Grafana → folder **Health**):
   metrics (HRV, resting HR, breathing rate, skin temperature) against your
   30-day baseline, and a "data as of" freshness indicator so a pre-sync
   morning reads as *still syncing*, not stale-as-fresh.
+- **Running (Strava)** *(optional)* — trailing 7- and 30-day distance,
+  distance-weighted pace (min/mi by default, switchable to min/km), and average
+  heart rate with an explicit coverage indicator, plus a weekly-mileage bar
+  chart and a recent-runs table. Only populated if you load the optional Strava
+  source above; heart rate is a query-time join against your Fitbit data, never
+  stored on the Strava side.
 
 Trends and Scoreboard are powered by hourly continuous aggregates and a
 shared 30-day-baseline view (migration `004_analytics.sql`), which need
