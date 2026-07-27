@@ -4,6 +4,13 @@ Pull your complete Fitbit health history into **TimescaleDB** (PostgreSQL), and 
 current with an automated sync job — so your heart rate, sleep, steps, HRV, and SpO2
 data lives in *your* database, queryable with real SQL and dashboarded with Grafana.
 
+![Health Scoreboard dashboard in Grafana: current streak, today's step count, this
+week vs a 30-day baseline, personal bests, a daily steps-vs-goal bar strip,
+week-over-week deltas, and a trailing-7-day Active Zone Minutes gauge](docs/dashboard_health_30days.png)
+
+<sub>The **Health Scoreboard** dashboard over a 30-day window — one of five
+provisioned out of the box. See [Dashboards](#dashboards).</sub>
+
 > **Status: early days.** The design is settling and implementation is starting.
 > Watch/star if you're interested — feedback and issues welcome.
 
@@ -144,7 +151,7 @@ Five dashboards are provisioned out of the box (Grafana → folder **Health**):
   correlation scatter plots.
 - **Health Scoreboard** — a 10–30 day motivational view: streaks, a daily
   steps-vs-goal strip, week-over-week deltas against your own 30-day
-  baseline, and personal bests.
+  baseline, and personal bests. *(Pictured at the top of this README.)*
 - **Morning Report** — last night's hypnogram and sleep score, recovery
   metrics (HRV, resting HR, breathing rate, skin temperature) against your
   30-day baseline, and a "data as of" freshness indicator so a pre-sync
